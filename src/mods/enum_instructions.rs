@@ -18,23 +18,25 @@ pub enum Instruction {
     INC(IncDecTarget),                   // OK
     DEC(IncDecTarget),                   // OK
 
-    JP(JumpTest),                        // OK
+    JP(JumpTestWithHLI),                  // OK
     CALL(JumpTest),                      // OK
     RET(JumpTest),                       // OK
+    JR(JumpTest),                        // OK
 
     RST(RstTarget),                      // OK
 
-    LD(LoadType),
+    LD(LoadType),                        // OK
 
-    NOP,
+    CCF,                                 // OK
+    SCF,                                 // OK
+    DAA,                                 // OK
+    CPL,                                 // OK
+
+    NOP,                                 // OK
     STOP,
-    HALT,
+    HALT,                                // OK
     DI,
     EI,
-    DAA,
-    SCF,
-    CCF,
-    CPL,
 
     RLC(PrefixTarget),
 }
@@ -48,10 +50,11 @@ pub enum Arithmetic16Target { BC, DE, HL, SP }
 pub enum IncDecTarget { A, B, C, D, E, H, L, BC, DE, HL, SP, HLI }
 pub enum PrefixTarget { B }
 pub enum JumpTest { NotZero, Zero, NotCarry, Carry, Always }
-pub enum LoadByteTarget { A, B, C, D, E, H, L, HLI, BCI, DEI, HLIInc, HLIDec }
-pub enum LoadByteSource { A, B, C, D, E, H, L, D8, HLI, BCI, DEI, HLIInc, HLIDec, A16I }
+pub enum JumpTestWithHLI { NotZero, Zero, NotCarry, Carry, Always, HLI }
+pub enum LoadByteTarget { A, B, C, D, E, H, L, HLI, BCI, DEI, HLIInc, HLIDec, A16I, A8I }
+pub enum LoadByteSource { A, B, C, D, E, H, L, D8, HLI, BCI, DEI, HLIInc, HLIDec, A16I, A8I }
 pub enum LoadWordTarget { BC, DE, HL, SP, A16I }
-pub enum LoadWordSource { D16, SP, HL }
+pub enum LoadWordSource { D16, SP, HL, SPPlusD8 }
 pub enum RstTarget { H00, H08, H10, H18, H20, H28, H30, H38 }
 
 impl Instruction {
@@ -100,7 +103,7 @@ impl Instruction {
             0x15 => Some(Instruction::DEC(IncDecTarget::D)),
             0x16 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::D, LoadByteSource::D8))),
             // TODO: Add 0x17
-            // TODO: Add 0x18
+            0x18 => Some(Instruction::JR(JumpTest::Always)),
             0x19 => Some(Instruction::ADD(AddType::ToHL(Arithmetic16Target::DE))),
             0x1a => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::A, LoadByteSource::DEI))),
             0x1b => Some(Instruction::DEC(IncDecTarget::DE)),
@@ -111,7 +114,7 @@ impl Instruction {
 
 
             // THIRD ROW -> 0x2.
-            // TODO: Add 0x20
+            0x20 => Some(Instruction::JR(JumpTest::NotZero)),
             0x21 => Some(Instruction::LD(LoadType::Word(LoadWordTarget::HL, LoadWordSource::D16))),
             0x22 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::HLIInc, LoadByteSource::A))),
             0x23 => Some(Instruction::INC(IncDecTarget::HL)),
@@ -119,8 +122,8 @@ impl Instruction {
             0x25 => Some(Instruction::DEC(IncDecTarget::H)),
             0x26 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::H, LoadByteSource::D8))),
             0x27 => Some(Instruction::DAA),
-            // TODO: Add 0x28
-            // 0x29 => Some(Instruction::ADD(ArithmeticTarget::HL)),
+            0x28 => Some(Instruction::JR(JumpTest::Zero)),
+            0x29 => Some(Instruction::ADD(AddType::ToHL(Arithmetic16Target::HL))),
             0x2a => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::A, LoadByteSource::HLIInc))),
             0x2b => Some(Instruction::DEC(IncDecTarget::HL)),
             0x2c => Some(Instruction::INC(IncDecTarget::L)),
@@ -130,7 +133,7 @@ impl Instruction {
 
 
             // FOURTH ROW -> 0x3.
-            // TODO: Add 0x30
+            0x30 => Some(Instruction::JR(JumpTest::NotCarry)),
             0x31 => Some(Instruction::LD(LoadType::Word(LoadWordTarget::SP, LoadWordSource::D16))),
             0x32 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::HLIDec, LoadByteSource::A))),
             0x33 => Some(Instruction::INC(IncDecTarget::SP)),
@@ -138,7 +141,7 @@ impl Instruction {
             0x35 => Some(Instruction::DEC(IncDecTarget::HLI)),
             0x36 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::HLI, LoadByteSource::D8))),
             0x37 => Some(Instruction::SCF),
-            // TODO: Add 0x38
+            0x38 => Some(Instruction::JR(JumpTest::Carry)),
             0x39 => Some(Instruction::ADD(AddType::ToHL(Arithmetic16Target::SP))),
             0x3a => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::A, LoadByteSource::HLIDec))),
             0x3b => Some(Instruction::DEC(IncDecTarget::SP)),
@@ -303,15 +306,15 @@ impl Instruction {
             // THIRTEENTH ROW -> 0xc.
             0xc0 => Some(Instruction::RET(JumpTest::NotZero)),
             0xc1 => Some(Instruction::POP(StackTarget::BC)),
-            0xc2 => Some(Instruction::JP(JumpTest::NotZero)),
-            0xc3 => Some(Instruction::JP(JumpTest::Always)),
+            0xc2 => Some(Instruction::JP(JumpTestWithHLI::NotZero)),
+            0xc3 => Some(Instruction::JP(JumpTestWithHLI::Always)),
             0xc4 => Some(Instruction::CALL(JumpTest::NotZero)),
             0xc5 => Some(Instruction::PUSH(StackTarget::BC)),
             0xc6 => Some(Instruction::ADD(ToA(ArithmeticTarget::D8))),
             0xc7 => Some(Instruction::RST(RstTarget::H00)),
             0xc8 => Some(Instruction::RET(JumpTest::Zero)),
             0xc9 => Some(Instruction::RET(JumpTest::Always)),
-            0xca => Some(Instruction::JP(JumpTest::Zero)),
+            0xca => Some(Instruction::JP(JumpTestWithHLI::Zero)),
             0xcc => Some(Instruction::CALL(JumpTest::Zero)),
             0xcd => Some(Instruction::CALL(JumpTest::Always)),
             0xce => Some(Instruction::ADC(ArithmeticTarget::D8)),
@@ -321,42 +324,42 @@ impl Instruction {
             // FOURTEENTH ROW -> 0xd.
             0xd0 => Some(Instruction::RET(JumpTest::NotCarry)),
             0xd1 => Some(Instruction::POP(StackTarget::DE)),
-            0xd2 => Some(Instruction::JP(JumpTest::NotCarry)),
+            0xd2 => Some(Instruction::JP(JumpTestWithHLI::NotCarry)),
             0xd4 => Some(Instruction::CALL(JumpTest::NotCarry)),
             0xd5 => Some(Instruction::PUSH(StackTarget::DE)),
             0xd6 => Some(Instruction::SUB(ArithmeticTarget::D8)),
             0xd7 => Some(Instruction::RST(RstTarget::H10)),
             0xd8 => Some(Instruction::RET(JumpTest::Carry)),
             0xd9 => Some(Instruction::RET(JumpTest::Always)),
-            0xda => Some(Instruction::JP(JumpTest::Carry)),
+            0xda => Some(Instruction::JP(JumpTestWithHLI::Carry)),
             0xdc => Some(Instruction::CALL(JumpTest::Carry)),
             0xde => Some(Instruction::SBC(ArithmeticTarget::D8)),
             0xdf => Some(Instruction::RST(RstTarget::H18)),
 
 
             // FIFTEENTH ROW -> 0xe.
-            // TODO: Add 0xe0
+            0xe0 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::A8I, LoadByteSource::A))),
             0xe1 => Some(Instruction::POP(StackTarget::HL)),
             0xe2 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::BCI, LoadByteSource::A))),
             0xe5 => Some(Instruction::PUSH(StackTarget::HL)),
             0xe6 => Some(Instruction::AND(ArithmeticTarget::D8)),
             0xe7 => Some(Instruction::RST(RstTarget::H20)),
             0xe8 => Some(Instruction::ADD(AddType::ToSP)),
-            // TODO: Add 0xe9
-            // TODO: Add 0xea
+            0xe9 => Some(Instruction::JP(JumpTestWithHLI::HLI)),
+            0xea => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::A16I, LoadByteSource::A))),
             0xee => Some(Instruction::XOR(ArithmeticTarget::D8)),
             0xef => Some(Instruction::RST(RstTarget::H28)),
 
 
             // SIXTEENTH ROW -> 0xf.
-            // TODO: Add 0xf0
+            0xf0 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::A, LoadByteSource::A8I))),
             0xf1 => Some(Instruction::POP(StackTarget::AF)),
             0xf2 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::A, LoadByteSource::BCI))),
             0xf3 => Some(Instruction::DI),
             0xf5 => Some(Instruction::PUSH(StackTarget::AF)),
             0xf6 => Some(Instruction::OR(ArithmeticTarget::D8)),
             0xf7 => Some(Instruction::RST(RstTarget::H30)),
-            // TODO: Add 0xf8
+            0xf8 => Some(Instruction::LD(LoadType::Word(LoadWordTarget::HL, LoadWordSource::SPPlusD8))),
             0xf9 => Some(Instruction::LD(LoadType::Word(LoadWordTarget::SP, LoadWordSource::HL))),
             0xfa => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::A, LoadByteSource::A16I))),
             0xfb => Some(Instruction::EI),

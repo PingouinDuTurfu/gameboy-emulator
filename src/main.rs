@@ -6,7 +6,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use crate::mods::enum_instructions::AddType;
+    use crate::mods::enum_instructions::{AddType, Instruction, RstTarget};
 
     #[test]
     fn test_cpu_add_a_to_a() {

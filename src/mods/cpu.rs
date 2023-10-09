@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter, Result};
 use std::ops::Add;
 
-use crate::mods::enum_instructions::{AddType, Arithmetic16Target, ArithmeticTarget, IncDecTarget, Instruction, JumpTest, LoadByteSource, LoadByteTarget, LoadType, RstTarget, StackTarget};
+use crate::mods::enum_instructions::{AddType, Arithmetic16Target, ArithmeticTarget, IncDecTarget, Instruction, JumpTest, JumpTestWithHLI, LoadByteSource, LoadByteTarget, LoadType, LoadWordSource, LoadWordTarget, RstTarget, StackTarget};
 use crate::mods::flag_register::FlagsRegister;
 use crate::mods::memory_bus::MemoryBus;
 use crate::mods::register::Registers;
@@ -718,14 +718,20 @@ impl CPU {
                 }
             }
             Instruction::JP(test) => {
-                let jump_condition = match test {
-                    JumpTest::NotZero => !self.registers.f.zero,
-                    JumpTest::NotCarry => !self.registers.f.carry,
-                    JumpTest::Zero => self.registers.f.zero,
-                    JumpTest::Carry => self.registers.f.carry,
-                    JumpTest::Always => true
-                };
-                self.jump(jump_condition)
+                if test == JumpTestWithHLI::HLI {
+                    self.pc = self.registers.get_hl();
+                    self.pc.wrapping_add(1)
+                } else {
+                    let jump_condition = match test {
+                        JumpTestWithHLI::NotZero => !self.registers.f.zero,
+                        JumpTestWithHLI::NotCarry => !self.registers.f.carry,
+                        JumpTestWithHLI::Zero => self.registers.f.zero,
+                        JumpTestWithHLI::Carry => self.registers.f.carry,
+                        JumpTestWithHLI::Always => true,
+                        _ => { panic!("Invalid jump test") }
+                    };
+                    self.jump(jump_condition)
+                }
             }
             Instruction::CALL(test) => {
                 let jump_condition = match test {
@@ -747,16 +753,58 @@ impl CPU {
                 };
                 self.return_(jump_condition)
             }
+            Instruction::JR(test) => {
+                let jump_condition = match test {
+                    JumpTest::NotZero => !self.registers.f.zero,
+                    JumpTest::NotCarry => !self.registers.f.carry,
+                    JumpTest::Zero => self.registers.f.zero,
+                    JumpTest::Carry => self.registers.f.carry,
+                    JumpTest::Always => true
+                };
+                self.jump_relative(jump_condition)
+            }
             Instruction::RST(address) => {
                 match address {
-                    RstTarget::H00 => self.rst(0x00),
-                    RstTarget::H08 => self.rst(0x08),
-                    RstTarget::H10 => self.rst(0x10),
-                    RstTarget::H18 => self.rst(0x18),
-                    RstTarget::H20 => self.rst(0x20),
-                    RstTarget::H28 => self.rst(0x28),
-                    RstTarget::H30 => self.rst(0x30),
-                    RstTarget::H38 => self.rst(0x38),
+                    RstTarget::H00 => {
+                        self.push(self.pc);
+                        self.pc = 0x0000;
+                        self.pc.wrapping_add(1)
+                    }
+                    RstTarget::H08 => {
+                        self.push(self.pc);
+                        self.pc = 0x0008;
+                        self.pc.wrapping_add(1)
+                    }
+                    RstTarget::H10 => {
+                        self.push(self.pc);
+                        self.pc = 0x0010;
+                        self.pc.wrapping_add(1)
+                    }
+                    RstTarget::H18 => {
+                        self.push(self.pc);
+                        self.pc = 0x0018;
+                        self.pc.wrapping_add(1)
+                    }
+                    RstTarget::H20 => {
+                        self.push(self.pc);
+                        self.pc = 0x0020;
+                        self.pc.wrapping_add(1)
+                    }
+                    RstTarget::H28 => {
+                        self.push(self.pc);
+                        self.pc = 0x0028;
+                        self.pc.wrapping_add(1)
+                    }
+                    RstTarget::H30 => {
+                        self.push(self.pc);
+                        self.pc = 0x0030;
+                        self.pc.wrapping_add(1)
+                    }
+                    RstTarget::H38 => {
+                        self.push(self.pc);
+                        self.pc = 0x0038;
+                        self.pc.wrapping_add(1)
+                    }
                 }
             }
             Instruction::LD(load_type) => {
@@ -772,7 +820,26 @@ impl CPU {
                             LoadByteSource::L => self.registers.l,
                             LoadByteSource::D8 => self.read_next_byte(),
                             LoadByteSource::HLI => self.bus.read_byte(self.registers.get_hl()),
-                            _ => { panic!("TODO: implement other sources") }
+                            LoadByteSource::BCI => self.bus.read_byte(self.registers.get_bc()),
+                            LoadByteSource::DEI => self.bus.read_byte(self.registers.get_de()),
+                            LoadByteSource::HLIInc => {
+                                let value = self.bus.read_byte(self.registers.get_hl());
+                                self.registers.set_hl(self.registers.get_hl().wrapping_add(1));
+                                value
+                            }
+                            LoadByteSource::HLIDec => {
+                                let value = self.bus.read_byte(self.registers.get_hl());
+                                self.registers.set_hl(self.registers.get_hl().wrapping_sub(1));
+                                value
+                            }
+                            LoadByteSource::A16I => {
+                                let value = self.read_next_word();
+                                self.bus.read_byte(value)
+                            }
+                            LoadByteSource::A8I => {
+                                let value = self.read_next_byte();
+                                self.bus.read_byte(0xFF00 | value as u16)
+                            }
                         };
                         match target {
                             LoadByteTarget::A => self.registers.a = source_value,
@@ -783,15 +850,98 @@ impl CPU {
                             LoadByteTarget::H => self.registers.h = source_value,
                             LoadByteTarget::L => self.registers.l = source_value,
                             LoadByteTarget::HLI => self.bus.write_byte(self.registers.get_hl(), source_value),
-                            _ => { panic!("TODO: implement other targets") }
+                            LoadByteTarget::BCI => self.bus.write_byte(self.registers.get_bc(), source_value),
+                            LoadByteTarget::DEI => self.bus.write_byte(self.registers.get_de(), source_value),
+                            LoadByteTarget::HLIInc => {
+                                self.bus.write_byte(self.registers.get_hl(), source_value);
+                                self.registers.set_hl(self.registers.get_hl().wrapping_add(1));
+                            }
+                            LoadByteTarget::HLIDec => {
+                                self.bus.write_byte(self.registers.get_hl(), source_value);
+                                self.registers.set_hl(self.registers.get_hl().wrapping_sub(1));
+                            }
+                            LoadByteTarget::A16I => {
+                                let address = self.read_next_word();
+                                self.bus.write_byte(address, source_value);
+                            }
+                            LoadByteTarget::A8I => {
+                                let address = self.read_next_byte();
+                                self.bus.write_byte(0xFF00 | address as u16, source_value);
+                            }
                         };
                         match source {
                             LoadByteSource::D8  => self.pc.wrapping_add(2),
                             _                   => self.pc.wrapping_add(1),
                         }
                     }
-                    _ => { panic!("TODO: implement other load types") }
+                    LoadType::Word(target, source) => {
+                        let source_value = match source {
+                            LoadWordSource::D16 => self.read_next_word(),
+                            LoadWordSource::SP => self.sp,
+                            LoadWordSource::HL => self.registers.get_hl(),
+                            LoadWordSource::SPPlusD8 => {
+                                let offset = self.read_next_byte() as i8 as i16 as u16;
+                                self.registers.f.zero = false;
+                                self.registers.f.subtract = false;
+                                self.registers.f.half_carry = (self.sp & 0xF) + (offset & 0xF) > 0xF;
+                                self.registers.f.carry = (self.sp & 0xFF) + (offset & 0xFF) > 0xFF;
+                                self.sp.wrapping_add(offset)
+                            }
+                        };
+                        match target {
+                            LoadWordTarget::BC => self.registers.set_bc(source_value),
+                            LoadWordTarget::DE => self.registers.set_de(source_value),
+                            LoadWordTarget::HL => self.registers.set_hl(source_value),
+                            LoadWordTarget::SP => self.sp = source_value,
+                            LoadWordTarget::A16I => {
+                                let address = self.read_next_word();
+                                self.bus.write_word(address, source_value);
+                            }
+                        };
+                        match source {
+                            LoadWordSource::D16 => self.pc.wrapping_add(3),
+                            LoadWordSource::SP => self.pc.wrapping_add(3),
+                            LoadWordSource::SPPlusD8 => self.pc.wrapping_add(2),
+                            _ => self.pc.wrapping_add(1),
+                        }
+                    }
                 }
+            }
+            Instruction::CCF => {
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = false;
+                self.registers.f.carry = !self.registers.f.carry;
+                self.pc.wrapping_add(1)
+            }
+            Instruction::SCF => {
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = false;
+                self.registers.f.carry = true;
+                self.pc.wrapping_add(1)
+            }
+            Instruction::DAA => {
+                let mut a = self.registers.a;
+                let mut adjust = if self.registers.f.carry { 0x60 } else { 0x00 };
+                if self.registers.f.half_carry { adjust |= 0x06; };
+                if !self.registers.f.subtract {
+                    if a & 0x0F > 0x09 { adjust |= 0x06; };
+                    if a > 0x99 { adjust |= 0x60; };
+                    a = a.wrapping_add(adjust);
+                } else {
+                    a = a.wrapping_sub(adjust);
+                }
+
+                self.registers.f.carry = adjust >= 0x60;
+                self.registers.f.half_carry = false;
+                self.registers.f.zero = a == 0;
+                self.registers.a = a;
+                self.pc.wrapping_add(1)
+            }
+            Instruction::CPL => {
+                self.registers.a = !self.registers.a;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = true;
+                self.pc.wrapping_add(1)
             }
             Instruction::HALT => {
                 self.halted = true;
@@ -801,15 +951,21 @@ impl CPU {
                 self.pc.wrapping_add(1)
             }
             Instruction::STOP => {
+                // Stop clock
                 panic!("TODO: implement STOP")
             }
             Instruction::DI => {
+                // Disable interrupts => IME = 0 and cancel any pending EI
                 panic!("TODO: implement DI")
             }
             Instruction::EI => {
+                // Schedule interrupt enable
                 panic!("TODO: implement EI")
             }
-            _ => { 0u16 /* TODO: support more instructions */ }
+
+            Instruction::RLC(_) => {
+                panic!("TODO: implement RLC")
+            }
         }
     }
 
@@ -945,36 +1101,19 @@ impl CPU {
         }
     }
 
-    fn rst(&mut self, address: u8) -> u16 {
-        self.push(self.pc.wrapping_add(1));
-        address as u16
+    fn jump_relative(&mut self, should_jump: bool) -> u16 {
+        if should_jump {
+            let offset = self.read_next_byte() as i8 as i16;
+            self.pc.wrapping_add(offset as u16)
+        } else {
+            self.pc.wrapping_add(2)
+        }
     }
 
     fn read_next_word(&mut self) -> u16 {
         let least_significant_byte = self.bus.read_byte(self.pc + 1) as u16;
         let most_significant_byte = self.bus.read_byte(self.pc + 2) as u16;
         (most_significant_byte << 8) | least_significant_byte
-    }
-
-    fn call_rst(&mut self, n: u8) {
-        // Determine the target address for the RST
-        let target_address = n as u16;
-
-        // Push the return address onto the stack
-        self.push_stack(self.pc + 1);
-
-        // Set the new PC to the RST target address
-        self.pc = target_address;
-    }
-
-    fn push_stack(&mut self, value: u16) {
-        // Decrement the stack pointer (SP) and write the high byte
-        self.sp = self.sp.wrapping_sub(1);
-        self.bus.write_byte(self.sp, ((value & 0xFF00) >> 8) as u8);
-
-        // Decrement the stack pointer again and write the low byte
-        self.sp = self.sp.wrapping_sub(1);
-        self.bus.write_byte(self.sp, (value & 0xFF) as u8);
     }
 
     pub(crate) fn read_next_byte(&mut self) -> u8 {
