@@ -11,7 +11,7 @@ fn main() {
     let mut cpu = CPU::new();
     let mut memory_bus = MemoryBus::new();
 
-    let mut input_file = File::open("/home/remy/Documents/Rust/gb/gb1/Pokemon.gb").expect("gameboy rom file");
+    let mut input_file = File::open("./roms/Pokemon.gb").expect("file not found");
 
     let mut buffer = [0; 0xFFFF];
     input_file.read(&mut buffer).expect("buffer overflow");

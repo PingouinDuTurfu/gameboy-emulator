@@ -27,8 +27,8 @@ pub enum Instruction {
     RST(RstTarget),                      // OK
 
     LD(LoadType),                        // OK
-    LDH_A8I_to_A,                        // OK
-    LDH_A_to_A8I,                        // OK
+    LdhA8iToA,                        // OK
+    LdhAToA8i,                        // OK
 
     CCF,                                 // OK
     SCF,                                 // OK
@@ -398,7 +398,7 @@ impl Instruction {
 
 
             // FIFTEENTH ROW -> 0xe.
-            0xe0 => Some(Instruction::LDH_A_to_A8I),
+            0xe0 => Some(Instruction::LdhAToA8i),
             0xe1 => Some(Instruction::POP(StackTarget::HL)),
             0xe2 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::CI, LoadByteSource::A))),
             0xe5 => Some(Instruction::PUSH(StackTarget::HL)),
@@ -412,7 +412,7 @@ impl Instruction {
 
 
             // SIXTEENTH ROW -> 0xf.
-            0xf0 => Some(Instruction::LDH_A8I_to_A),
+            0xf0 => Some(Instruction::LdhA8iToA),
             0xf1 => Some(Instruction::POP(StackTarget::AF)),
             0xf2 => Some(Instruction::LD(LoadType::Byte(LoadByteTarget::A, LoadByteSource::CI))),
             0xf3 => Some(Instruction::DI),

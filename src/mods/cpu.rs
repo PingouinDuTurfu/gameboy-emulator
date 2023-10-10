@@ -944,12 +944,12 @@ impl CPU {
                     }
                 }
             }
-            Instruction::LDH_A_to_A8I => {
+            Instruction::LdhAToA8i => {
                 let address = self.read_next_byte();
                 self.bus.write_byte(0xFF00 | address as u16, self.registers.a);
                 self.pc.wrapping_add(2)
             }
-            Instruction::LDH_A8I_to_A => {
+            Instruction::LdhA8iToA => {
                 let address = self.read_next_byte();
                 self.registers.a = self.bus.read_byte(0xFF00 | address as u16);
                 self.pc.wrapping_add(2)
