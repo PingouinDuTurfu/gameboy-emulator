@@ -80,10 +80,10 @@ pub enum PrefixU8 { U0, U1, U2, U3, U4, U5, U6, U7 }
 impl Instruction {
     pub(crate) fn from_byte(byte: u8, prefixed: bool) -> Option<Instruction> {
         if prefixed {
-            Instruction::print_debug_prefixed(byte.clone());
+            // Instruction::print_debug_prefixed(byte.clone());
             Instruction::from_byte_prefixed(byte)
         } else {
-            Instruction::print_debug(byte.clone());
+            // Instruction::print_debug(byte.clone());
             Instruction::from_byte_not_prefixed(byte)
         }
     }

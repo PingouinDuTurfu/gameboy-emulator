@@ -4,14 +4,14 @@ use std::ops::Add;
 use crate::mods::enum_instructions::{AddType, Arithmetic16Target, ArithmeticTarget, IncDecTarget, Instruction, JumpTest, JumpTestWithHLI, LoadByteSource, LoadByteTarget, LoadType, LoadWordSource, LoadWordTarget, PrefixTarget, PrefixU8, RstTarget, StackTarget};
 use crate::mods::flag_register::FlagsRegister;
 use crate::mods::key_pad::Keypad;
-use crate::mods::memory_bus::MemoryBus;
+use crate::mods::memory_bus::Bus;
 use crate::mods::register::Registers;
 
 pub struct CPU {
     pub registers: Registers,
     pub pc: u16,
     pub sp: u16,
-    pub bus: MemoryBus,
+    pub bus: Bus,
     pub halted: bool,
     pub ime: bool,
     pub setdi: u32,
@@ -34,7 +34,7 @@ impl CPU {
             },
             pc: 0,
             sp: 0xFFFE,
-            bus: MemoryBus::new(),
+            bus: Bus::new(),
             halted: false,
             ime: true,
             setdi: 0,

@@ -1,15 +1,23 @@
 use std::fs::File;
 use std::io::{Read, Seek};
 
+extern crate winit;
+
+use winit::{
+    event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::WindowBuilder,
+};
+
+use mods::cpu::CPU;
+use mods::memory_bus::Bus;
+
 mod mods;
 
 fn main() {
 
-    use mods::cpu::CPU;
-    use mods::memory_bus::MemoryBus;
-
     let mut cpu = CPU::new();
-    let mut memory_bus = MemoryBus::new();
+    let mut memory_bus = Bus::new();
 
     let mut input_file = File::open("./roms/Pokemon.gb").expect("file not found");
 
@@ -23,23 +31,76 @@ fn main() {
     cpu.sp = 0xFFFE;
 
     let mut i: i64 = 0;
-    loop {
-        print!("step {} addr {:04X} ", i, cpu.pc);
+
+    // Créez une boucle d'événements avec winit
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new().build(&event_loop).unwrap();
+
+    // Définissez une fonction de rappel pour gérer les événements
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+
+        match event {
+            Event::WindowEvent { event, window_id } if window_id == window.id() => match event {
+                WindowEvent::KeyboardInput { input, .. } => {
+                    match input.virtual_keycode {
+                        Some(VirtualKeyCode::A) => {
+                            if input.state == winit::event::ElementState::Pressed {
+                                println!("La touche 'A' a été enfoncée.");
+                                cpu.bus.keypad.keydown(mods::key_pad::KeypadKey::A);
+                            }
+                        }
+                        Some(VirtualKeyCode::E) => {
+                            if input.state == winit::event::ElementState::Pressed {
+                                println!("La touche 'E' a été enfoncée.");
+                                cpu.bus.keypad.keydown(mods::key_pad::KeypadKey::B);
+                            }
+                        }
+                        Some(VirtualKeyCode::Z) => {
+                            if input.state == winit::event::ElementState::Pressed {
+                                println!("La touche 'Z' a été enfoncée.");
+                                cpu.bus.keypad.keydown(mods::key_pad::KeypadKey::Up);
+                            }
+                        }
+                        Some(VirtualKeyCode::Q) => {
+                            if input.state == winit::event::ElementState::Pressed {
+                                println!("La touche 'Q' a été enfoncée.");
+                                cpu.bus.keypad.keydown(mods::key_pad::KeypadKey::Left);
+                            }
+                        }
+                        Some(VirtualKeyCode::S) => {
+                            if input.state == winit::event::ElementState::Pressed {
+                                println!("La touche 'S' a été enfoncée.");
+                                cpu.bus.keypad.keydown(mods::key_pad::KeypadKey::Down);
+                            }
+                        }
+                        Some(VirtualKeyCode::D) => {
+                            if input.state == winit::event::ElementState::Pressed {
+                                println!("La touche 'D' a été enfoncée.");
+                                cpu.bus.keypad.keydown(mods::key_pad::KeypadKey::Right);
+                            }
+                        }
+                        Some(VirtualKeyCode::Escape) => {
+                            if input.state == winit::event::ElementState::Pressed {
+                                println!("La touche 'Escape' a été enfoncée.");
+                                *control_flow = ControlFlow::Exit;
+                            }
+                        }
+                        _ => (),
+                    }
+
+                }
+                // Gérez d'autres événements de fenêtre si nécessaire
+                _ => (),
+            },
+            Event::LoopDestroyed => return,
+            _ => (),
+        }
+
+        // print!("step {} 0x{:04X} ", i, cpu.pc);
         cpu.step();
         i += 1;
-        if(i == 1000) {
-            break;
-        }
-    }
-
-    // loop {
-        // Wait for a key to be pressed
-        // let mut input = String::new();
-        // std::io::stdin().read_line(&mut input).expect("stdin");
-        // println!("Executing instruction at address 0x{:04X}", cpu.pc);
-        // cpu.step();
-        // println!("End step");
-    // }
+    });
 }
 
 #[cfg(test)]
@@ -175,9 +236,9 @@ mod tests {
     #[test]
     fn test_cpu_reading_bus_memory() {
         use crate::mods::cpu::CPU;
-        use crate::mods::memory_bus::MemoryBus;
+        use crate::mods::memory_bus::Bus;
 
-        let mut memory_bus = MemoryBus::new();
+        let mut memory_bus = Bus::new();
 
         // Placez l'instruction "add A to A" (0x87) à l'adresse mémoire suivante.
         memory_bus.memory[0x00] = 0x87;

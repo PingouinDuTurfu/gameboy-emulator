@@ -65,6 +65,7 @@ impl Keypad {
             KeypadKey::Select => self.row1 &= !(1 << 2),
             KeypadKey::Start =>  self.row1 &= !(1 << 3),
         }
+        println!("row0: {:b}, row1: {:b}", self.row0, self.row1);
         self.update();
     }
 

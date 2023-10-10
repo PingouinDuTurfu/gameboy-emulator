@@ -1,16 +1,16 @@
 use crate::mods::key_pad::Keypad;
 
-pub struct MemoryBus {
+pub struct Bus {
     pub memory: [u8; 0xFFFF],
-    pub key_pad: Keypad
+    pub keypad: Keypad
 }
 
-impl MemoryBus {
+impl Bus {
 
-    pub fn new() -> MemoryBus {
-        MemoryBus {
+    pub fn new() -> Bus {
+        Bus {
             memory: [0; 0xFFFF],
-            key_pad: Keypad::new()
+            keypad: Keypad::new()
         }
     }
 
