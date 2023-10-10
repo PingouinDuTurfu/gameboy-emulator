@@ -1,12 +1,52 @@
+use std::fs::File;
+use std::io::{Read, Seek};
+
+use device_query::{DeviceQuery, DeviceState, Keycode};
+
 mod mods;
 
 fn main() {
 
+    use mods::cpu::CPU;
+    use mods::memory_bus::MemoryBus;
+
+    let mut cpu = CPU::new();
+    let mut memory_bus = MemoryBus::new();
+
+    let mut input_file = File::open("/home/remy/Documents/Rust/gb/gb1/Pokemon.gb").expect("gameboy rom file");
+
+    let mut buffer = [0; 0xFFFF];
+    input_file.read(&mut buffer).expect("buffer overflow");
+
+    memory_bus.memory = buffer;
+    cpu.bus = memory_bus;
+
+    cpu.pc = 0x0150;
+    cpu.sp = 0xFFFE;
+
+    let mut i: i64 = 0;
+    loop {
+        print!("step {} addr {:04X} ", i, cpu.pc);
+        cpu.step();
+        i += 1;
+        if(i == 1000) {
+            break;
+        }
+    }
+
+    // loop {
+        // Wait for a key to be pressed
+        // let mut input = String::new();
+        // std::io::stdin().read_line(&mut input).expect("stdin");
+        // println!("Executing instruction at address 0x{:04X}", cpu.pc);
+        // cpu.step();
+        // println!("End step");
+    // }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::mods::enum_instructions::{AddType, Instruction, RstTarget};
+    use crate::mods::enum_instructions::{AddType, Instruction};
 
     #[test]
     fn test_cpu_add_a_to_a() {
@@ -259,7 +299,7 @@ mod tests {
     #[test]
     fn test_cpu_load_byte_register_to_register() {
         use crate::mods::cpu::CPU;
-        use crate::mods::enum_instructions::{LoadByteSource, LoadByteTarget, LoadType, Instruction};
+        use crate::mods::enum_instructions::{Instruction, LoadByteSource, LoadByteTarget, LoadType};
 
         let mut cpu = CPU::new();
         cpu.registers.a = 0x42;
