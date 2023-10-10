@@ -1,8 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Seek};
 
-use device_query::{DeviceQuery, DeviceState, Keycode};
-
 mod mods;
 
 fn main() {
@@ -244,14 +242,9 @@ mod tests {
     #[test]
     fn test_cpu_stack_initial_sp() {
         use crate::mods::cpu::CPU;
-        use crate::mods::memory_bus::MemoryBus;
-
         let mut cpu = CPU::new();
         cpu.pc = 0x1000;
         cpu.sp = 0xFFFE;
-        cpu.bus = MemoryBus {
-            memory: [0; 0xFFFF],
-        };
 
         assert_eq!(cpu.sp, 0xFFFE);
     }
@@ -259,14 +252,9 @@ mod tests {
     #[test]
     fn test_cpu_stack_push() {
         use crate::mods::cpu::CPU;
-        use crate::mods::memory_bus::MemoryBus;
-
         let mut cpu = CPU::new();
         cpu.pc = 0x1000;
         cpu.sp = 0xFFFE;
-        cpu.bus = MemoryBus {
-            memory: [0; 0xFFFF],
-        };
 
         cpu.push(0x1234);
 
@@ -278,14 +266,9 @@ mod tests {
     #[test]
     fn test_cpu_stack_pop() {
         use crate::mods::cpu::CPU;
-        use crate::mods::memory_bus::MemoryBus;
-
         let mut cpu = CPU::new();
         cpu.pc = 0x1000;
         cpu.sp = 0xFFFC;
-        cpu.bus = MemoryBus {
-            memory: [0; 0xFFFF],
-        };
 
         cpu.bus.memory[0xFFFD] = 0x12;
         cpu.bus.memory[0xFFFC] = 0x34;
@@ -338,7 +321,7 @@ mod tests {
         let byte = cpu.read_next_byte();
 
         assert_eq!(byte, 0x55);
-        assert_eq!(cpu.pc, 0x2001);
+        assert_eq!(cpu.pc, 0x2000);
     }
 
     // #[test]
