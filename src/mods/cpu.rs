@@ -3,8 +3,8 @@ use std::ops::Add;
 
 use crate::mods::enum_instructions::{AddType, Arithmetic16Target, ArithmeticTarget, IncDecTarget, Instruction, JumpTest, JumpTestWithHLI, LoadByteSource, LoadByteTarget, LoadType, LoadWordSource, LoadWordTarget, PrefixTarget, PrefixU8, RstTarget, StackTarget};
 use crate::mods::flag_register::FlagsRegister;
-use crate::mods::key_pad::Keypad;
-use crate::mods::memory_bus::Bus;
+use crate::mods::keypad::Keypad;
+use crate::mods::bus::Bus;
 use crate::mods::register::Registers;
 
 pub struct CPU {
@@ -14,8 +14,7 @@ pub struct CPU {
     pub bus: Bus,
     pub halted: bool,
     pub ime: bool,
-    pub setdi: u32,
-    pub setei: u32,
+    pub ime_scheduled: bool,
 }
 
 impl CPU {
@@ -36,21 +35,24 @@ impl CPU {
             sp: 0xFFFE,
             bus: Bus::new(),
             halted: false,
-            ime: true,
-            setdi: 0,
-            setei: 0,
+            ime: false,
+            ime_scheduled: false,
         }
     }
 
-    pub(crate) fn step(&mut self) {
+    pub(crate) fn step(&mut self, debug: bool) {
+        if self.ime_scheduled == true {
+            self.ime_scheduled = false;
+            self.ime = true; // Now interrupts should occur delayed one instruction
+        }
+
         let mut instruction_byte = self.bus.read_byte(self.pc);
         let prefixed = instruction_byte == 0xCB;
-        self.update_ime();
         if prefixed {
             instruction_byte = self.bus.read_byte(self.pc + 1);
         }
 
-        let next_pc = if let Some(instruction) = Instruction::from_byte(instruction_byte, prefixed) {
+        let next_pc = if let Some(instruction) = Instruction::from_byte(instruction_byte, prefixed, debug) {
             self.execute(instruction)
         } else {
             let description = format!("0x{}{:x}", if prefixed { "cb" } else { "" }, instruction_byte);
@@ -58,19 +60,6 @@ impl CPU {
         };
 
         self.pc = next_pc;
-    }
-
-    pub fn update_ime(&mut self) {
-        self.setdi = match self.setdi {
-            2 => 1,
-            1 => { self.ime = false; 0 },
-            _ => 0,
-        };
-        self.setei = match self.setei {
-            2 => 1,
-            1 => { self.ime = true; 0 },
-            _ => 0,
-        };
     }
 
     pub fn execute(&mut self, instruction: Instruction) -> u16 {
@@ -1031,12 +1020,12 @@ impl CPU {
             }
             Instruction::DI => {
                 // Disable interrupts => IME = 0 and cancel any pending EI
-                self.setdi = 2;
+                self.ime = false;
                 self.pc.wrapping_add(1)
             }
             Instruction::EI => {
                 // Schedule interrupt enable
-                self.setei = 2;
+                self.ime_scheduled = true;
                 self.pc.wrapping_add(1)
             }
 
@@ -1765,11 +1754,10 @@ impl CPU {
 
     fn jump_relative(&mut self, should_jump: bool) -> u16 {
         if should_jump {
-            let old_pc = self.pc;
             self.pc = self.pc.wrapping_add(1);
             let offset = self.read_next_byte() as i8 as i16;
-            self.pc = old_pc.wrapping_add(offset as u16);
-            self.pc
+            self.pc = self.pc.wrapping_add(offset as u16);
+            self.pc.wrapping_add(1)
         } else {
             self.pc.wrapping_add(2)
         }

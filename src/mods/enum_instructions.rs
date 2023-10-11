@@ -78,12 +78,16 @@ pub enum PrefixTarget { A, B, C, D, E, H, L, HLI }
 pub enum PrefixU8 { U0, U1, U2, U3, U4, U5, U6, U7 }
 
 impl Instruction {
-    pub(crate) fn from_byte(byte: u8, prefixed: bool) -> Option<Instruction> {
+    pub(crate) fn from_byte(byte: u8, prefixed: bool, debug: bool) -> Option<Instruction> {
         if prefixed {
-            // Instruction::print_debug_prefixed(byte.clone());
+            if debug {
+                Instruction::print_debug_prefixed(byte);
+            }
             Instruction::from_byte_prefixed(byte)
         } else {
-            // Instruction::print_debug(byte.clone());
+            if debug {
+                Instruction::print_debug(byte);
+            }
             Instruction::from_byte_not_prefixed(byte)
         }
     }
@@ -112,6 +116,7 @@ impl Instruction {
     }
 
     fn print_debug_prefixed(byte: u8) {
+        print!("0x{:02X} ", byte);
         match byte {
             0x00 => println!("Prefix: RLC B"), 0x01 => println!("Prefix: RLC C"), 0x02 => println!("Prefix: RLC D"), 0x03 => println!("Prefix: RLC E"), 0x04 => println!("Prefix: RLC H"), 0x05 => println!("Prefix: RLC L"), 0x06 => println!("Prefix: RLC (HL)"), 0x07 => println!("Prefix: RLC A"), 0x08 => println!("Prefix: RRC B"), 0x09 => println!("Prefix: RRC C"), 0x0a => println!("Prefix: RRC D"), 0x0b => println!("Prefix: RRC E"), 0x0c => println!("Prefix: RRC H"), 0x10 => println!("Prefix: RL B"), 0x11 => println!("Prefix: RL C"), 0x12 => println!("Prefix: RL D"),
             0x13 => println!("Prefix: RL E"), 0x14 => println!("Prefix: RL H"), 0x15 => println!("Prefix: RL L"), 0x16 => println!("Prefix: RL (HL)"), 0x17 => println!("Prefix: RL A"), 0x18 => println!("Prefix: RR B"), 0x19 => println!("Prefix: RR C"), 0x1a => println!("Prefix: RR D"), 0x1b => println!("Prefix: RR E"), 0x0d => println!("Prefix: Prefix: RRC L"), 0x0e => println!("Prefix: Prefix: RRC (HL)"), 0x0f => println!("Prefix: Prefix: RRC A"), 0x1c => println!("Prefix: RR H"), 0x1d => println!("Prefix: RR L"), 0x1e => println!("Prefix: RR (HL)"), 0x1f => println!("Prefix: RR A"),
