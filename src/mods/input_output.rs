@@ -27,8 +27,8 @@ impl InputOutput {
         return self.io[usize::from(addr - IO_START)];
     }
 
-    pub fn write_byte(self: &mut Self, addr: u16, data: u8) {
-        match addr {
+    pub fn write_byte(self: &mut Self, address: u16, data: u8) {
+        match address {
             IF_REG => {
                 self.io[usize::from(IF_REG  - IO_START)] = data | 0xE0;
                 self.if_register_trigger = true;

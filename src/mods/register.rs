@@ -37,7 +37,7 @@ impl Registers {
         self.set_hl(0x014D);
     }
 
-    fn get_af(&self) -> u16 {
+    pub(crate) fn get_af(&self) -> u16 {
         (self.a as u16) << 8 | u8::from(self.f.clone()) as u16
     }
 
@@ -56,7 +56,7 @@ impl Registers {
             | self.l as u16
     }
 
-    fn set_af(&mut self, value: u16) {
+    pub(crate) fn set_af(&mut self, value: u16) {
         self.a = ((value & 0xFF00) >> 8) as u8;
         self.f = ((value & 0xFF) as u8).into();
     }

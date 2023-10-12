@@ -41,6 +41,10 @@ impl Bus {
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
+        // println!("Bus : Write to {:04X} : {:02X}", address, value);
+        if address == KEYPAD_REGISTER {
+            println!("Keypad write: {:02X} => ", value)
+        }
         match address {
             KEYPAD_REGISTER => self.keypad.write_byte(address, value),
             0xFF03..=0xFF0F => self.input_output.write_byte(address, value),

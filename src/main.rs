@@ -1,12 +1,11 @@
+extern crate sdl2;
+
 use std::fs::File;
 use std::io::{Read, Seek};
 
 use mods::emulator::Emulator;
 
 mod mods;
-mod test;
-
-extern crate sdl2;
 
 fn main() {
 
@@ -23,12 +22,9 @@ fn main() {
          cristaux liquides (LCD) à matrice de points, d'où le nom.
      */
 
-    let mut input_file = File::open("./roms/Tetris.gb").expect("file not found");
-    let mut buffer = [0; 0xFFFF];
-    input_file.read(&mut buffer).expect("buffer overflow");
-
     let mut emulator = Emulator::new();
     emulator.setup_emulator("./roms/Tetris.gb");
+    emulator.run();
 
     //
     // let mut i: i64 = 0;

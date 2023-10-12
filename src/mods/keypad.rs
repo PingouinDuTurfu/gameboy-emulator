@@ -30,7 +30,7 @@ impl Keypad {
             event_pump: None,
             row_direction: 0x0F,
             row_command: 0x0F,
-            data: 0xFF,
+            data: 0xCF,
             button_change: false,
             something_selected: false,
         }
@@ -40,28 +40,33 @@ impl Keypad {
         self.data = 0xFF;
     }
 
-    pub fn read_byte(self: &Self, addr: u16) -> u8 {
+    pub fn read_byte(self: &Self, address: u16) -> u8 {
         if !self.something_selected {
             return self.data | 0x0F;
         }
-        let byte = match addr {
+        let byte = match address {
             KEYPAD_REGISTER => self.data,
-            _ => panic!("Joypad cannot read from addr: {:04X}", addr),
+            _ => panic!("Joypad cannot read from addr: {:04X}", address),
         };
         return byte;
     }
 
-    pub fn write_byte(self: &mut Self, addr: u16, data: u8) {
-        match addr {
+    pub fn write_byte(self: &mut Self, address: u16, data: u8) {
+        println!("rfytguhijolp");
+        match address {
             KEYPAD_REGISTER => {
+                print!("Keypad write: {:02X} => ", data);
                 self.data = (data & 0x30) | (self.data & 0xCF);
                 self.something_selected = (self.data & 0x20 == 0x20) ^ (self.data & 0x10 == 0x10);
             }
-            _ => panic!("Joypad cannot write addr: {:04X}", addr),
+            _ => panic!("Joypad cannot write addr: {:04X}", address),
         };
     }
 
     pub fn is_keypad_interrupt(self: &Self) -> bool {
+        if self.something_selected && self.button_change {
+            println!("Joypad interrupt");
+        }
         return self.something_selected && self.button_change;
     }
 
@@ -72,8 +77,8 @@ impl Keypad {
     pub(crate) fn update_input(&mut self) -> bool {
         let mut should_exit = false;
 
-        if let Some(joypad) = &mut self.event_pump {
-            let event = joypad.poll_event();
+        if let Some(keypad) = &mut self.event_pump {
+            let event = keypad.poll_event();
 
             if let Some(e) = event {
                 match e {
@@ -98,10 +103,15 @@ impl Keypad {
             self.data = (self.data & 0xF0) | self.row_command;
         }
 
+        if should_exit  {
+            println!("Exiting");
+        }
+
         return should_exit;
     }
 
     pub fn keydown(&mut self, key: Keycode) {
+        self.button_change = true;
         match key {
             Keycode::D => self.row_direction &= !(1 << 0),
             Keycode::Q => self.row_direction &= !(1 << 1),
@@ -116,6 +126,8 @@ impl Keypad {
     }
 
     pub fn keyup(&mut self, key: Keycode) {
+        println!("Keyup: {:?}", key);
+        self.button_change = true;
         match key {
             Keycode::D => self.row_direction |= 1 << 0,
             Keycode::Q => self.row_direction |= 1 << 1,

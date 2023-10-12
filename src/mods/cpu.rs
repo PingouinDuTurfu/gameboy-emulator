@@ -46,23 +46,22 @@ impl CPU {
     }
 
     pub(crate) fn step(&mut self, debug: bool) {
+        if(debug) {
+            print!("step 0x{:04X} ", self.pc);
+        }
+
         if self.ime_scheduled == true {
             self.ime_scheduled = false;
-            self.ime = true; // Now interrupts should occur delayed one instruction
+            self.ime = true;
         }
 
-        let mut instruction_byte = self.bus.read_byte(self.pc);
+        let mut instruction_byte = self.read_byte(self.pc);
         let prefixed = instruction_byte == 0xCB;
         if prefixed {
-            instruction_byte = self.bus.read_byte(self.pc + 1);
+            instruction_byte = self.read_byte(self.pc + 1);
         }
 
-        let next_pc = if let Some(instruction) = Instruction::from_byte(instruction_byte, prefixed, debug) {
-            self.execute(instruction)
-        } else {
-            let description = format!("0x{}{:x}", if prefixed { "cb" } else { "" }, instruction_byte);
-            panic!("Unkown instruction found for: {}", description)
-        };
+        let next_pc = self.execute(instruction_byte);
 
         self.pc = next_pc;
     }
@@ -77,8 +76,8 @@ impl CPU {
     }
 
     fn handle_interrupt(&mut self) {
-        let i_enable = self.read_addr(0xFFFF);
-        let mut if_register_trigger = self.read_addr(0xFF0F);
+        let i_enable = self.read_byte(0xFFFF);
+        let mut if_register_trigger = self.read_byte(0xFF0F);
         self.ime = false;
         self.halted = false;
 
@@ -95,921 +94,229 @@ impl CPU {
         }
     }
 
-    fn read_addr(self: &mut Self, addr: u16) -> u8 {
-        let byte = self.bus.read_byte(addr);
-        // self.adv_cycles(4);
-        // self.curr_cycles += 4;
-        return byte;
-    }
-
-    fn write_byte(self: &mut Self, addr: u16, data: u8) {
-        self.bus.write_byte(addr, data);
-        // self.adv_cycles(4);
-        // self.curr_cycles += 4;
-    }
-
-    pub fn set_keypad(self: &mut Self, event_pump: sdl2::EventPump) {
-        self.bus.set_keypad(event_pump);
-    }
-
-    pub fn set_mbc(self: &mut Self, cart_mbc: MbcDefault) {
-        self.bus.set_mbc(cart_mbc);
-    }
-
-    pub fn execute(&mut self, instruction: Instruction) -> u16 {
+    pub fn execute(&mut self, byte: u8) -> u16 {
         if self.halted {
             return self.pc.wrapping_add(1);
         }
 
-        match instruction {
-            Instruction::PUSH(target) => {
-                let value = match target {
-                    StackTarget::BC => self.registers.get_bc(),
-                    StackTarget::DE => self.registers.get_de(),
-                    StackTarget::HL => self.registers.get_hl(),
-                    StackTarget::AF => { /* TODO: implement AF */ 0u16 }
-                };
-                self.push(value);
+        match byte {
+            0x00 => self.pc.wrapping_add(1),
+            0x01 => {
+                let value = self.read_next_word();
+                self.registers.set_bc(value); 
+                self.pc.wrapping_add(3)
+            },
+            0x02 => {
+                let value = self.registers.a;
+                let address = self.registers.get_bc();
+                self.write_byte(address, value);
+                self.pc.wrapping_add(1)},
+            0x03 => {
+                let value =  self.registers.get_bc().wrapping_add(1);
+                self.registers.set_bc(value);
                 self.pc.wrapping_add(1)
-            }
-            Instruction::POP(target) => {
-                let result = self.pop();
-                match target {
-                    StackTarget::BC => self.registers.set_bc(result),
-                    StackTarget::DE => self.registers.set_de(result),
-                    StackTarget::HL => self.registers.set_hl(result),
-                    StackTarget::AF => { /* TODO: implement AF */ }
-                };
-                self.pc.wrapping_add(1)
-            }
-            Instruction::ADD(add_type) => {
-                match add_type {
-                    AddType::ToA(target) => {
-                        match target {
-                            ArithmeticTarget::A => {
-                                let value = self.registers.a;
-                                let new_value = self.add(value);
-                                self.registers.a = new_value;
-                                self.pc.wrapping_add(1)
-                            }
-                            ArithmeticTarget::B => {
-                                let value = self.registers.b;
-                                let new_value = self.add(value);
-                                self.registers.a = new_value;
-                                self.pc.wrapping_add(1)
-                            }
-
-                            ArithmeticTarget::C => {
-                                let value = self.registers.c;
-                                let new_value = self.add(value);
-                                self.registers.a = new_value;
-                                self.pc.wrapping_add(1)
-                            }
-                            ArithmeticTarget::D => {
-                                let value = self.registers.d;
-                                let new_value = self.add(value);
-                                self.registers.a = new_value;
-                                self.pc.wrapping_add(1)
-                            }
-                            ArithmeticTarget::E => {
-                                let value = self.registers.e;
-                                let new_value = self.add(value);
-                                self.registers.a = new_value;
-                                self.pc.wrapping_add(1)
-                            }
-                            ArithmeticTarget::H => {
-                                let value = self.registers.h;
-                                let new_value = self.add(value);
-                                self.registers.a = new_value;
-                                self.pc.wrapping_add(1)
-                            }
-                            ArithmeticTarget::L => {
-                                let value = self.registers.l;
-                                let new_value = self.add(value);
-                                self.registers.a = new_value;
-                                self.pc.wrapping_add(1)
-                            }
-                            ArithmeticTarget::HLI => {
-                                let value = self.bus.read_byte(self.registers.get_hl());
-                                let new_value = self.add(value);
-                                self.registers.a = new_value;
-                                self.pc.wrapping_add(1)
-                            }
-                            ArithmeticTarget::D8 => {
-                                let value = self.read_next_byte();
-                                let new_value = self.add(value);
-                                self.registers.a = new_value;
-                                self.pc.wrapping_add(2)
-                            }
-                        }
-                    }
-                    AddType::ToHL(target) => {
-                        match target {
-                            Arithmetic16Target::BC => {
-                                let value = self.registers.get_bc();
-                                let new_value = self.add_16(value);
-                                self.registers.set_hl(new_value);
-                                self.pc.wrapping_add(1)
-                            }
-                            Arithmetic16Target::DE => {
-                                let value = self.registers.get_de();
-                                let new_value = self.add_16(value);
-                                self.registers.set_hl(new_value);
-                                self.pc.wrapping_add(1)
-                            }
-                            Arithmetic16Target::HL => {
-                                let value = self.registers.get_hl();
-                                let new_value = self.add_16(value);
-                                self.registers.set_hl(new_value);
-                                self.pc.wrapping_add(1)
-                            }
-                            Arithmetic16Target::SP => {
-                                let value = self.sp;
-                                let new_value = self.add_16(value);
-                                self.registers.set_hl(new_value);
-                                self.pc.wrapping_add(1)
-                            }
-                        }
-                    }
-                    AddType::ToSP => {
-                        let value = self.read_next_byte();
-                        let new_value = self.add_16(value as u16);
-                        self.sp = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::ADC(target) => {
-                match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.add_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.add_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.add_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.add_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.add_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.add_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.add_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.add_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D8 => {
-                        let value = self.read_next_byte();
-                        let new_value = self.add_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::SUB(target) => {
-                match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.sub(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.sub(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.sub(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.sub(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.sub(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.sub(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.sub(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.sub(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D8 => {
-                        let value = self.read_next_byte();
-                        let new_value = self.sub(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::SBC(target) => {
-                match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.sub_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.sub_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.sub_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.sub_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.sub_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.sub_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.sub_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.sub_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D8 => {
-                        let value = self.read_next_byte();
-                        let new_value = self.sub_with_carry(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::CP(target) => {
-                match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        self.cp(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        self.cp(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        self.cp(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        self.cp(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        self.cp(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        self.cp(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        self.cp(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        self.cp(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D8 => {
-                        let value = self.read_next_byte();
-                        self.cp(value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::AND(target) => {
-                match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        self.and(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        self.and(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        self.and(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        self.and(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        self.and(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        self.and(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        self.and(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        self.and(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D8 => {
-                        let value = self.read_next_byte();
-                        self.and(value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::OR(target) => {
-                match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        self.or(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        self.or(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        self.or(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        self.or(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        self.or(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        self.or(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        self.or(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        self.or(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D8 => {
-                        let value = self.read_next_byte();
-                        self.or(value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::XOR(target) => {
-                match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        self.xor(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        self.xor(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        self.xor(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        self.xor(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        self.xor(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        self.xor(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        self.xor(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        self.xor(value);
-                        self.pc.wrapping_add(1)
-                    }
-                    ArithmeticTarget::D8 => {
-                        let value = self.read_next_byte();
-                        self.xor(value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::INC(target) => {
-                match target {
-                    IncDecTarget::A => {
-                        let new_value =  self.registers.a.wrapping_add(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = false;
-                        self.registers.f.half_carry = (self.registers.a & 0xF) + 0x1 > 0xF;
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::B => {
-                        let new_value = self.registers.b.wrapping_add(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = false;
-                        self.registers.f.half_carry = (self.registers.b & 0xF) + 0x1 > 0xF;
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::C => {
-                        let new_value = self.registers.c.wrapping_add(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = false;
-                        self.registers.f.half_carry = (self.registers.c & 0xF) + 0x1 > 0xF;
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::D => {
-                        let new_value = self.registers.d.wrapping_add(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = false;
-                        self.registers.f.half_carry = (self.registers.d & 0xF) + 0x1 > 0xF;
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::E => {
-                        let new_value = self.registers.e.wrapping_add(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = false;
-                        self.registers.f.half_carry = (self.registers.e & 0xF) + 0x1 > 0xF;
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::H => {
-                        let new_value =  self.registers.h.wrapping_add(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = false;
-                        self.registers.f.half_carry = (self.registers.h & 0xF) + 0x1 > 0xF;
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::L => {
-                        let new_value =  self.registers.l.wrapping_add(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = false;
-                        self.registers.f.half_carry = (self.registers.l & 0xF) + 0x1 > 0xF;
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::BC => {
-                        let new_value =  self.registers.get_bc().wrapping_add(1);
-                        self.registers.set_bc(new_value);
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::DE => {
-                        let new_value =  self.registers.get_de().wrapping_add(1);
-                        self.registers.set_de(new_value);
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::HL => {
-                        let new_value =  self.registers.get_hl().wrapping_add(1);
-                        self.registers.set_hl(new_value);
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::SP => {
-                        let new_value =  self.sp.wrapping_add(1);
-                        self.sp = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::HLI => {
-                        let new_value =  self.bus.read_byte(self.registers.get_hl()).wrapping_add(1);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(1)
-                    }
-                }
-            }
-            Instruction::DEC(target) => {
-                match target {
-                    IncDecTarget::A => {
-                        let new_value =  self.registers.a.wrapping_sub(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = true;
-                        self.registers.f.half_carry = (self.registers.a & 0xF) < 0x1;
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::B => {
-                        let new_value = self.registers.b.wrapping_sub(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = true;
-                        self.registers.f.half_carry = (self.registers.b & 0xF) < 0x1;
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::C => {
-                        let new_value = self.registers.c.wrapping_sub(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = true;
-                        self.registers.f.half_carry = (self.registers.c & 0xF) < 0x1;
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::D => {
-                        let new_value = self.registers.d.wrapping_sub(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = true;
-                        self.registers.f.half_carry = (self.registers.d & 0xF) < 0x1;
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::E => {
-                        let new_value = self.registers.e.wrapping_sub(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = true;
-                        self.registers.f.half_carry = (self.registers.e & 0xF) < 0x1;
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::H => {
-                        let new_value =  self.registers.h.wrapping_sub(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = true;
-                        self.registers.f.half_carry = (self.registers.h & 0xF) < 0x1;
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::L => {
-                        let new_value =  self.registers.l.wrapping_sub(1);
-                        self.registers.f.zero = new_value == 0;
-                        self.registers.f.subtract = true;
-                        self.registers.f.half_carry = (self.registers.l & 0xF) < 0x1;
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::BC => {
-                        let new_value =  self.registers.get_bc().wrapping_sub(1);
-                        self.registers.set_bc(new_value);
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::DE => {
-                        let new_value =  self.registers.get_de().wrapping_sub(1);
-                        self.registers.set_de(new_value);
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::HL => {
-                        let new_value =  self.registers.get_hl().wrapping_sub(1);
-                        self.registers.set_hl(new_value);
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::SP => {
-                        let new_value =  self.sp.wrapping_sub(1);
-                        self.sp = new_value;
-                        self.pc.wrapping_add(1)
-                    }
-                    IncDecTarget::HLI => {
-                        let new_value =  self.bus.read_byte(self.registers.get_hl()).wrapping_sub(1);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(1)
-                    }
-                }
-            }
-            Instruction::JP(test) => {
-                match test {
-                    JumpTestWithHLI::HLI => {
-                        self.pc = self.registers.get_hl();
-                        self.pc.wrapping_add(1)
-                    }
-                    _ => {
-                        let jump_condition = match test {
-                            JumpTestWithHLI::NotZero => !self.registers.f.zero,
-                            JumpTestWithHLI::NotCarry => !self.registers.f.carry,
-                            JumpTestWithHLI::Zero => self.registers.f.zero,
-                            JumpTestWithHLI::Carry => self.registers.f.carry,
-                            JumpTestWithHLI::Always => true,
-                            _ => { panic!("Invalid jump test") }
-                        };
-                        self.jump(jump_condition)
-                    }
-                }
-            }
-            Instruction::CALL(test) => {
-                let jump_condition = match test {
-                    JumpTest::NotZero => !self.registers.f.zero,
-                    JumpTest::NotCarry => !self.registers.f.carry,
-                    JumpTest::Zero => self.registers.f.zero,
-                    JumpTest::Carry => self.registers.f.carry,
-                    JumpTest::Always => true
-                };
-                self.call(jump_condition)
-            }
-            Instruction::RET(test) => {
-                let jump_condition = match test {
-                    JumpTest::NotZero => !self.registers.f.zero,
-                    JumpTest::NotCarry => !self.registers.f.carry,
-                    JumpTest::Zero => self.registers.f.zero,
-                    JumpTest::Carry => self.registers.f.carry,
-                    JumpTest::Always => true
-                };
-                self.return_(jump_condition)
-            }
-            Instruction::RETI => {
-                self.return_(true);
-                self.ime = true;
-                self.pc.wrapping_add(1)
-            }
-            Instruction::JR(test) => {
-                let jump_condition = match test {
-                    JumpTest::NotZero => !self.registers.f.zero,
-                    JumpTest::NotCarry => !self.registers.f.carry,
-                    JumpTest::Zero => self.registers.f.zero,
-                    JumpTest::Carry => self.registers.f.carry,
-                    JumpTest::Always => true
-                };
-                self.jump_relative(jump_condition)
-            }
-            Instruction::RST(address) => {
-                match address {
-                    RstTarget::H00 => {
-                        self.push(self.pc);
-                        self.pc = 0x0000;
-                        self.pc.wrapping_add(1)
-                    }
-                    RstTarget::H08 => {
-                        self.push(self.pc);
-                        self.pc = 0x0008;
-                        self.pc.wrapping_add(1)
-                    }
-                    RstTarget::H10 => {
-                        self.push(self.pc);
-                        self.pc = 0x0010;
-                        self.pc.wrapping_add(1)
-                    }
-                    RstTarget::H18 => {
-                        self.push(self.pc);
-                        self.pc = 0x0018;
-                        self.pc.wrapping_add(1)
-                    }
-                    RstTarget::H20 => {
-                        self.push(self.pc);
-                        self.pc = 0x0020;
-                        self.pc.wrapping_add(1)
-                    }
-                    RstTarget::H28 => {
-                        self.push(self.pc);
-                        self.pc = 0x0028;
-                        self.pc.wrapping_add(1)
-                    }
-                    RstTarget::H30 => {
-                        self.push(self.pc);
-                        self.pc = 0x0030;
-                        self.pc.wrapping_add(1)
-                    }
-                    RstTarget::H38 => {
-                        self.push(self.pc);
-                        self.pc = 0x0038;
-                        self.pc.wrapping_add(1)
-                    }
-                }
-            }
-            Instruction::LD(load_type) => {
-                match load_type {
-                    LoadType::Byte(target, source) => {
-                        let source_value = match source {
-                            LoadByteSource::A => self.registers.a,
-                            LoadByteSource::B => self.registers.b,
-                            LoadByteSource::C => self.registers.c,
-                            LoadByteSource::D => self.registers.d,
-                            LoadByteSource::E => self.registers.e,
-                            LoadByteSource::H => self.registers.h,
-                            LoadByteSource::L => self.registers.l,
-                            LoadByteSource::D8 => self.read_next_byte(),
-                            LoadByteSource::HLI => self.bus.read_byte(self.registers.get_hl()),
-                            LoadByteSource::BCI => self.bus.read_byte(self.registers.get_bc()),
-                            LoadByteSource::DEI => self.bus.read_byte(self.registers.get_de()),
-                            LoadByteSource::HLIInc => {
-                                let value = self.bus.read_byte(self.registers.get_hl());
-                                self.registers.set_hl(self.registers.get_hl().wrapping_add(1));
-                                value
-                            }
-                            LoadByteSource::HLIDec => {
-                                let value = self.bus.read_byte(self.registers.get_hl());
-                                self.registers.set_hl(self.registers.get_hl().wrapping_sub(1));
-                                value
-                            }
-                            LoadByteSource::A16I => {
-                                let value = self.read_next_word();
-                                self.bus.read_byte(value)
-                            }
-                            LoadByteSource::A8I => {
-                                let value = self.read_next_byte();
-                                self.bus.read_byte(0xFF00 | value as u16)
-                            }
-                            LoadByteSource::CI => {
-                                let value = self.registers.c;
-                                self.bus.read_byte(0xFF00 | value as u16)
-                            }
-                        };
-                        match target {
-                            LoadByteTarget::A => self.registers.a = source_value,
-                            LoadByteTarget::B => self.registers.b = source_value,
-                            LoadByteTarget::C => self.registers.c = source_value,
-                            LoadByteTarget::D => self.registers.d = source_value,
-                            LoadByteTarget::E => self.registers.e = source_value,
-                            LoadByteTarget::H => self.registers.h = source_value,
-                            LoadByteTarget::L => self.registers.l = source_value,
-                            LoadByteTarget::HLI => self.bus.write_byte(self.registers.get_hl(), source_value),
-                            LoadByteTarget::BCI => self.bus.write_byte(self.registers.get_bc(), source_value),
-                            LoadByteTarget::DEI => self.bus.write_byte(self.registers.get_de(), source_value),
-                            LoadByteTarget::HLIInc => {
-                                self.bus.write_byte(self.registers.get_hl(), source_value);
-                                self.registers.set_hl(self.registers.get_hl().wrapping_add(1));
-                            }
-                            LoadByteTarget::HLIDec => {
-                                self.bus.write_byte(self.registers.get_hl(), source_value);
-                                self.registers.set_hl(self.registers.get_hl().wrapping_sub(1));
-                            }
-                            LoadByteTarget::A16I => {
-                                let address = self.read_next_word();
-                                self.bus.write_byte(address, source_value);
-                                return self.pc.wrapping_add(3);
-                            }
-                            LoadByteTarget::A8I => {
-                                let address = self.read_next_byte();
-                                self.bus.write_byte(0xFF00 | address as u16, source_value);
-                            }
-                            LoadByteTarget::CI => {
-                                let address = self.registers.c;
-                                self.bus.write_byte(0xFF00 | address as u16, source_value);
-                            }
-                        };
-                        match source {
-                            LoadByteSource::D8  => self.pc.wrapping_add(2),
-                            _                   => self.pc.wrapping_add(1),
-                        }
-                    }
-                    LoadType::Word(target, source) => {
-                        let source_value = match source {
-                            LoadWordSource::D16 => self.read_next_word(),
-                            LoadWordSource::SP => self.sp,
-                            LoadWordSource::HL => self.registers.get_hl(),
-                            LoadWordSource::SPPlusD8 => {
-                                let offset = self.read_next_byte() as i8 as i16 as u16;
-                                self.registers.f.zero = false;
-                                self.registers.f.subtract = false;
-                                self.registers.f.half_carry = (self.sp & 0xF) + (offset & 0xF) > 0xF;
-                                self.registers.f.carry = (self.sp & 0xFF) + (offset & 0xFF) > 0xFF;
-                                self.sp.wrapping_add(offset)
-                            }
-                        };
-                        match target {
-                            LoadWordTarget::BC => self.registers.set_bc(source_value),
-                            LoadWordTarget::DE => self.registers.set_de(source_value),
-                            LoadWordTarget::HL => self.registers.set_hl(source_value),
-                            LoadWordTarget::SP => self.sp = source_value,
-                            LoadWordTarget::A16I => {
-                                let address = self.read_next_word();
-                                self.bus.write_word(address, source_value);
-                            }
-                        };
-                        match source {
-                            LoadWordSource::D16 => self.pc.wrapping_add(3),
-                            LoadWordSource::SP => self.pc.wrapping_add(3),
-
-                            LoadWordSource::SPPlusD8 => self.pc.wrapping_add(2),
-                            _ => self.pc.wrapping_add(1),
-                        }
-                    }
-                }
-            }
-            Instruction::LdhAToA8i => {
-                let address = self.read_next_byte();
-                self.bus.write_byte(0xFF00 | address as u16, self.registers.a);
-                self.pc.wrapping_add(2)
-            }
-            Instruction::LdhA8iToA => {
-                let address = self.read_next_byte();
-                self.registers.a = self.bus.read_byte(0xFF00 | address as u16);
-                self.pc.wrapping_add(2)
-            }
-            Instruction::CCF => {
+            },
+            0x04 => {
+                let value = self.registers.b.wrapping_add(1);
+                self.registers.f.zero = value == 0;
                 self.registers.f.subtract = false;
-                self.registers.f.half_carry = false;
-                self.registers.f.carry = !self.registers.f.carry;
+                self.registers.f.half_carry = (self.registers.b & 0xF) + 0x1 > 0xF;
+                self.registers.b = value;
                 self.pc.wrapping_add(1)
-            }
-            Instruction::SCF => {
+            },
+            0x05 => {
+                let value = self.registers.b.wrapping_sub(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = (self.registers.b & 0xF) < 0x1;
+                self.registers.b = value;
+                self.pc.wrapping_add(1)
+            },
+            0x06 => {
+                self.registers.b = self.read_next_byte();
+                self.pc.wrapping_add(2)
+            },
+            0x07 => {
+                let value = self.registers.a;
+                let value = self.rlc(value);
+                self.registers.a = value;
+                self.registers.f.zero = false;
+                self.pc.wrapping_add(1)
+            },
+            0x08 => {
+                let address = self.read_next_word();
+                self.write_word(address, self.sp);
+                self.pc.wrapping_add(3)
+            },
+
+            0x09 => {
+                let value = self.registers.get_bc();
+                let value = self.add_16(value);
+                self.registers.set_hl(value);
+                self.pc.wrapping_add(1)
+            },
+            0x0a => {
+                self.registers.a = self.read_byte(self.registers.get_bc());
+                self.pc.wrapping_add(1)
+            },
+            0x0b => {
+                let value =  self.registers.get_bc().wrapping_sub(1);
+                self.registers.set_bc(value);
+                self.pc.wrapping_add(1)
+            },
+            0x0c => {
+                let value = self.registers.c.wrapping_add(1);
+                self.registers.f.zero = value == 0;
                 self.registers.f.subtract = false;
-                self.registers.f.half_carry = false;
-                self.registers.f.carry = true;
+                self.registers.f.half_carry = (self.registers.c & 0xF) + 0x1 > 0xF;
+                self.registers.c = value;
                 self.pc.wrapping_add(1)
-            }
-            Instruction::DAA => {
+            },
+            0x0d =>  {
+                let value = self.registers.c.wrapping_sub(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = (self.registers.c & 0xF) < 0x1;
+                self.registers.c = value;
+                self.pc.wrapping_add(1)
+            },
+            0x0e => {
+                self.registers.c = self.read_next_byte();
+                self.pc.wrapping_add(2)
+            },
+            0x0f => {
+                let value = self.registers.a;
+                let value = self.rrc(value);
+                self.registers.a = value;
+                self.registers.f.zero = false;
+                self.pc.wrapping_add(1)
+            },
+            0x10 => {
+                // Stop clock
+                panic!("TODO: implement STOP")
+            },
+            0x11 => {
+                let value = self.read_next_word();
+                self.registers.set_de(value);
+                self.pc.wrapping_add(3)
+            },
+            0x12 => {
+                self.write_byte(self.registers.get_hl(), self.registers.a);
+                self.pc.wrapping_add(1)
+            },
+            0x13 =>  {
+                let value =  self.registers.get_de().wrapping_add(1);
+                self.registers.set_de(value);
+                self.pc.wrapping_add(1)
+            },
+            0x14 => {
+                let value = self.registers.d.wrapping_add(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = (self.registers.d & 0xF) + 0x1 > 0xF;
+                self.registers.d = value;
+                self.pc.wrapping_add(1)
+            },
+            0x15 => {
+                let value = self.registers.d.wrapping_sub(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = (self.registers.d & 0xF) < 0x1;
+                self.registers.d = value;
+                self.pc.wrapping_add(1)
+            },
+            0x16 => {
+                self.registers.d = self.read_next_byte();
+                self.pc.wrapping_add(2)
+            },
+            0x17 => {
+                let value = self.registers.a;
+                let value = self.rl(value);
+                self.registers.a = value;
+                self.registers.f.zero = false;
+                self.pc.wrapping_add(1)
+            },
+            0x18 => self.jump_relative(true),
+            0x19 => {
+                let value = self.registers.get_de();
+                let value = self.add_16(value);
+                self.registers.set_hl(value);
+                self.pc.wrapping_add(1)
+            },
+            0x1a => {
+                self.registers.a = self.read_byte(self.registers.get_de());
+                self.pc.wrapping_add(1)
+            },
+            0x1b =>  {
+                let value =  self.registers.get_de().wrapping_sub(1);
+                self.registers.set_de(value);
+                self.pc.wrapping_add(1)
+            },
+            0x1c => {
+                let value = self.registers.e.wrapping_add(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = (self.registers.e & 0xF) + 0x1 > 0xF;
+                self.registers.e = value;
+                self.pc.wrapping_add(1)
+            },
+            0x1d => {
+                let value = self.registers.e.wrapping_sub(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = (self.registers.e & 0xF) < 0x1;
+                self.registers.e = value;
+                self.pc.wrapping_add(1)
+            },
+            0x1e => {
+                self.registers.e = self.read_next_byte();
+                self.pc.wrapping_add(2)
+            },
+            0x1f => {
+                let value = self.registers.a;
+                let value = self.rr(value);
+                self.registers.a = value;
+                self.registers.f.zero = false;
+                self.pc.wrapping_add(1)
+            },
+            0x20 => self.jump_relative(!self.registers.f.zero),
+            0x21 => {
+                // ICI
+                let value = self.read_next_word();
+                self.registers.set_hl(value);
+                self.pc.wrapping_add(3)
+            },
+            0x22 => {
+                self.write_byte(self.registers.get_hl(), self.registers.a);
+                self.registers.set_hl(self.registers.get_hl().wrapping_add(1));
+                self.pc.wrapping_add(1)
+            },
+            0x23 => {
+                let value =  self.registers.get_hl().wrapping_add(1);
+                self.registers.set_hl(value);
+                self.pc.wrapping_add(1)
+            },
+            0x24 => {
+                let value =  self.registers.h.wrapping_add(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = (self.registers.h & 0xF) + 0x1 > 0xF;
+                self.registers.h = value;
+                self.pc.wrapping_add(1)
+            },
+            0x25 => {
+                let value =  self.registers.h.wrapping_sub(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = (self.registers.h & 0xF) < 0x1;
+                self.registers.h = value;
+                self.pc.wrapping_add(1)
+            },
+            0x26 => {
+                self.registers.h = self.read_next_byte();
+                self.pc.wrapping_add(2)
+            },
+            0x27 => {
                 let mut a = self.registers.a;
                 let mut adjust = if self.registers.f.carry { 0x60 } else { 0x00 };
                 if self.registers.f.half_carry { adjust |= 0x06; };
@@ -1026,765 +333,1082 @@ impl CPU {
                 self.registers.f.zero = a == 0;
                 self.registers.a = a;
                 self.pc.wrapping_add(1)
-            }
-            Instruction::CPL => {
+            },
+            0x28 => self.jump_relative(self.registers.f.zero),
+            0x29 => {
+                let value = self.registers.get_hl();
+                let value = self.add_16(value);
+                self.registers.set_hl(value);
+                self.pc.wrapping_add(1)
+            },
+            0x2a => {
+                self.registers.a = self.read_byte(self.registers.get_hl());
+                self.registers.set_hl(self.registers.get_hl().wrapping_add(1));
+                self.pc.wrapping_add(1)
+            },
+            0x2b => {
+                let value =  self.registers.get_hl().wrapping_sub(1);
+                self.registers.set_hl(value);
+                self.pc.wrapping_add(1)
+            },
+            0x2c => {
+                let value =  self.registers.l.wrapping_add(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = (self.registers.l & 0xF) + 0x1 > 0xF;
+                self.registers.l = value;
+                self.pc.wrapping_add(1)
+            },
+            0x2d => {
+                let value =  self.registers.l.wrapping_sub(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = (self.registers.l & 0xF) < 0x1;
+                self.registers.l = value;
+                self.pc.wrapping_add(1)
+            },
+            0x2e => {
+                self.registers.l = self.read_next_byte();
+                self.pc.wrapping_add(2)
+            },
+            0x2f => {
                 self.registers.a = !self.registers.a;
                 self.registers.f.subtract = true;
                 self.registers.f.half_carry = true;
                 self.pc.wrapping_add(1)
-            }
-            Instruction::RLCA => {
-                let value = self.registers.a;
-                let new_value = self.rlc(value);
-                self.registers.a = new_value;
-                self.registers.f.zero = false;
+            },
+            0x30 => self.jump_relative(!self.registers.f.carry),
+            0x31 => {
+                self.sp = self.read_next_word();
+                self.pc.wrapping_add(3)
+            },
+            0x32 => {
+                self.write_byte(self.registers.get_hl(), self.registers.a);
+                self.registers.set_hl(self.registers.get_hl().wrapping_sub(1));
                 self.pc.wrapping_add(1)
-            }
-            Instruction::RLA => {
-                let value = self.registers.a;
-                let new_value = self.rl(value);
-                self.registers.a = new_value;
-                self.registers.f.zero = false;
+            },
+            0x33 => {
+                let value =  self.sp.wrapping_add(1);
+                self.sp = value;
                 self.pc.wrapping_add(1)
-            }
-            Instruction::RRCA => {
-                let value = self.registers.a;
-                let new_value = self.rrc(value);
-                self.registers.a = new_value;
-                self.registers.f.zero = false;
+            },
+            0x34 => {
+                let value =  self.read_byte(self.registers.get_hl()).wrapping_add(1);
+                self.write_byte(self.registers.get_hl(), value);
                 self.pc.wrapping_add(1)
-            }
-            Instruction::RRA => {
-                let value = self.registers.a;
-                let new_value = self.rr(value);
-                self.registers.a = new_value;
-                self.registers.f.zero = false;
+            },
+            0x35 => {
+                let value =  self.read_byte(self.registers.get_hl()).wrapping_sub(1);
+                self.write_byte(self.registers.get_hl(), value);
                 self.pc.wrapping_add(1)
-            }
-            Instruction::HALT => {
+            },
+            0x36 => {
+                let value = self.read_next_byte();
+                let address = self.registers.get_hl();
+                self.write_byte(address, value);
+                self.pc.wrapping_add(2)
+            },
+            0x37 => {
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = false;
+                self.registers.f.carry = true;
+                self.pc.wrapping_add(1)
+            },
+            0x38 => self.jump_relative(self.registers.f.carry),
+            0x39 => {
+                let value = self.sp;
+                let value = self.add_16(value);
+                self.registers.set_hl(value);
+                self.pc.wrapping_add(1)
+            },
+            0x3a => {
+                self.registers.a = self.read_byte(self.registers.get_hl());
+                self.registers.set_hl(self.registers.get_hl().wrapping_sub(1));
+                self.pc.wrapping_add(1)
+            },
+            0x3b => {
+                let value =  self.sp.wrapping_sub(1);
+                self.sp = value;
+                self.pc.wrapping_add(1)
+            },
+            0x3c => {
+                let value =  self.registers.a.wrapping_add(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = (self.registers.a & 0xF) + 0x1 > 0xF;
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x3d => {
+                let value =  self.registers.a.wrapping_sub(1);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = (self.registers.a & 0xF) < 0x1;
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x3e => {
+                self.registers.a = self.read_next_byte();
+                self.pc.wrapping_add(2)
+            },
+            0x3f => {
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = false;
+                self.registers.f.carry = !self.registers.f.carry;
+                self.pc.wrapping_add(1)
+            },
+            0x40 => {
+                self.registers.b = self.registers.b;
+                self.pc.wrapping_add(1)
+            },
+            0x41 => {
+                self.registers.b = self.registers.c;
+                self.pc.wrapping_add(1)
+            },
+            0x42 => {
+                self.registers.b = self.registers.d;
+                self.pc.wrapping_add(1)
+            },
+            0x43 => {
+                self.registers.b = self.registers.e;
+                self.pc.wrapping_add(1)
+            },
+            0x44 => {
+                self.registers.b = self.registers.h;
+                self.pc.wrapping_add(1)
+            },
+            0x45 => {
+                self.registers.b = self.registers.l;
+                self.pc.wrapping_add(1)
+            },
+            0x46 => {
+                self.registers.b = self.read_byte(self.registers.get_hl());
+                self.pc.wrapping_add(1)
+            },
+            0x47 => {
+                self.registers.b = self.registers.a;
+                self.pc.wrapping_add(1)
+            },
+            0x48 => {
+                self.registers.c = self.registers.b;
+                self.pc.wrapping_add(1)
+            },
+            0x49 => {
+                self.registers.c = self.registers.c;
+                self.pc.wrapping_add(1)
+            },
+            0x4a => {
+                self.registers.c = self.registers.d;
+                self.pc.wrapping_add(1)
+            },
+            0x4b => {
+                self.registers.c = self.registers.e;
+                self.pc.wrapping_add(1)
+            },
+            0x4c => {
+                self.registers.c = self.registers.h;
+                self.pc.wrapping_add(1)
+            },
+            0x4d => {
+                self.registers.c = self.registers.l;
+                self.pc.wrapping_add(1)
+            },
+            0x4e => {
+                self.registers.c = self.read_byte(self.registers.get_hl());
+                self.pc.wrapping_add(1)
+            },
+            0x4f => {
+                self.registers.c = self.registers.a;
+                self.pc.wrapping_add(1)
+            },
+            0x50 => {
+                self.registers.d = self.registers.b;
+                self.pc.wrapping_add(1)
+            },
+            0x51 => {
+                self.registers.d = self.registers.c;
+                self.pc.wrapping_add(1)
+            },
+            0x52 => {
+                self.registers.d = self.registers.d;
+                self.pc.wrapping_add(1)
+            },
+            0x53 => {
+                self.registers.d = self.registers.e;
+                self.pc.wrapping_add(1)
+            },
+            0x54 => {
+                self.registers.d = self.registers.h;
+                self.pc.wrapping_add(1)
+            },
+            0x55 => {
+                self.registers.d = self.registers.l;
+                self.pc.wrapping_add(1)
+            },
+            0x56 => {
+                self.registers.d = self.read_byte(self.registers.get_hl());
+                self.pc.wrapping_add(1)
+            },
+            0x57 => {
+                self.registers.d = self.registers.a;
+                self.pc.wrapping_add(1)
+            },
+            0x58 => {
+                self.registers.e = self.registers.b;
+                self.pc.wrapping_add(1)
+            },
+            0x59 => {
+                self.registers.e = self.registers.c;
+                self.pc.wrapping_add(1)
+            },
+            0x5a => {
+                self.registers.e = self.registers.d;
+                self.pc.wrapping_add(1)
+            },
+            0x5b => {
+                self.registers.e = self.registers.e;
+                self.pc.wrapping_add(1)
+            },
+            0x5c => {
+                self.registers.e = self.registers.h;
+                self.pc.wrapping_add(1)
+            },
+            0x5d => {
+                self.registers.e = self.registers.l;
+                self.pc.wrapping_add(1)
+            },
+            0x5e => {
+                self.registers.e = self.read_byte(self.registers.get_hl());
+                self.pc.wrapping_add(1)
+            },
+            0x5f => {
+                self.registers.e = self.registers.a;
+                self.pc.wrapping_add(1)
+            },
+            0x60 => {
+                self.registers.h = self.registers.b;
+                self.pc.wrapping_add(1)
+            },
+            0x61 => {
+                self.registers.h = self.registers.c;
+                self.pc.wrapping_add(1)
+            },
+            0x62 => {
+                self.registers.h = self.registers.d;
+                self.pc.wrapping_add(1)
+            },
+            0x63 => {
+                self.registers.h = self.registers.e;
+                self.pc.wrapping_add(1)
+            },
+            0x64 => {
+                self.registers.h = self.registers.h;
+                self.pc.wrapping_add(1)
+            },
+            0x65 => {
+                self.registers.h = self.registers.l;
+                self.pc.wrapping_add(1)
+            },
+            0x66 => {
+                self.registers.h = self.read_byte(self.registers.get_hl());
+                self.pc.wrapping_add(1)
+            },
+            0x67 => {
+                self.registers.h = self.registers.a;
+                self.pc.wrapping_add(1)
+            },
+            0x68 => {
+                self.registers.l = self.registers.b;
+                self.pc.wrapping_add(1)
+            },
+            0x69 => {
+                self.registers.l = self.registers.c;
+                self.pc.wrapping_add(1)
+            },
+            0x6a => {
+                self.registers.l = self.registers.d;
+                self.pc.wrapping_add(1)
+            },
+            0x6b => {
+                self.registers.l = self.registers.e;
+                self.pc.wrapping_add(1)
+            },
+            0x6c => {
+                self.registers.l = self.registers.h;
+                self.pc.wrapping_add(1)
+            },
+            0x6d => {
+                self.registers.l = self.registers.l;
+                self.pc.wrapping_add(1)
+            },
+            0x6e => {
+                self.registers.l = self.read_byte(self.registers.get_hl());
+                self.pc.wrapping_add(1)
+            },
+            0x6f => {
+                self.registers.l = self.registers.a;
+                self.pc.wrapping_add(1)
+            },
+            0x70 => {
+                self.write_byte(self.registers.get_hl(), self.registers.b);
+                self.pc.wrapping_add(1)
+            },
+            0x71 => {
+                self.write_byte(self.registers.get_hl(), self.registers.c);
+                self.pc.wrapping_add(1)
+            },
+            0x72 => {
+                self.write_byte(self.registers.get_hl(), self.registers.d);
+                self.pc.wrapping_add(1)
+            },
+            0x73 => {
+                self.write_byte(self.registers.get_hl(), self.registers.e);
+                self.pc.wrapping_add(1)
+            },
+            0x74 => {
+                self.write_byte(self.registers.get_hl(), self.registers.h);
+                self.pc.wrapping_add(1)
+            },
+            0x75 => {
+                self.write_byte(self.registers.get_hl(), self.registers.l);
+                self.pc.wrapping_add(1)
+            },
+            0x76 => {
                 self.halted = true;
                 self.pc.wrapping_add(1)
-            }
-            Instruction::NOP => {
+            },
+            0x77 => {
+                self.write_byte(self.registers.get_hl(), self.registers.a);
+                self.pc.wrapping_add(1)
+            },
+            0x78 => {
+                self.registers.a = self.registers.b;
+                self.pc.wrapping_add(1)
+            },
+            0x79 => {
+                self.registers.a = self.registers.c;
+                self.pc.wrapping_add(1)
+            },
+            0x7a => {
+                self.registers.a = self.registers.d;
+                self.pc.wrapping_add(1)
+            },
+            0x7b => {
+                self.registers.a = self.registers.e;
+                self.pc.wrapping_add(1)
+            },
+            0x7c => {
+                self.registers.a = self.registers.h;
+                self.pc.wrapping_add(1)
+            },
+            0x7d => {
+                self.registers.a = self.registers.l;
+                self.pc.wrapping_add(1)
+            },
+            0x7e => {
+                self.registers.a = self.read_byte(self.registers.get_hl());
+                self.pc.wrapping_add(1)
+            },
+            0x7f => {
+                self.registers.a = self.registers.a;
+                self.pc.wrapping_add(1)
+            },
+            0x80 => {
+                let value = self.registers.b;
+                let value = self.add(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x81 => {
+                let value = self.registers.c;
+                let value = self.add(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x82 => {
+                let value = self.registers.d;
+                let value = self.add(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x83 => {
+                let value = self.registers.e;
+                let value = self.add(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x84 => {
+                let value = self.registers.h;
+                let value = self.add(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x85 => {
+                let value = self.registers.l;
+                let value = self.add(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x86 => {
+                let value = self.read_byte(self.registers.get_hl());
+                let value = self.add(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x87 => {
+                let value = self.registers.a;
+                let value = self.add(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x88 => {
+                let value = self.registers.b;
+                let value = self.add_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x89 => {
+                let value = self.registers.c;
+                let value = self.add_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x8a => {
+                let value = self.registers.d;
+                let value = self.add_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x8b => {
+                let value = self.registers.e;
+                let value = self.add_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x8c => {
+                let value = self.registers.h;
+                let value = self.add_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x8d => {
+                let value = self.registers.l;
+                let value = self.add_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x8e => {
+                let value = self.read_byte(self.registers.get_hl());
+                let value = self.add_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x8f => {
+                let value = self.registers.a;
+                let value = self.add_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x90 => {
+                let value = self.registers.b;
+                let value = self.sub(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x91 => {
+                let value = self.registers.c;
+                let value = self.sub(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x92 => {
+                let value = self.registers.d;
+                let value = self.sub(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x93 => {
+                let value = self.registers.e;
+                let value = self.sub(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x94 => {
+                let value = self.registers.h;
+                let value = self.sub(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x95 => {
+                let value = self.registers.l;
+                let value = self.sub(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x96 => {
+                let value = self.read_byte(self.registers.get_hl());
+                let value = self.sub(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x97 => {
+                let value = self.registers.a;
+                let value = self.sub(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x98 => {
+                let value = self.registers.b;
+                let value = self.sub_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x99 => {
+                let value = self.registers.c;
+                let value = self.sub_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x9a => {
+                let value = self.registers.d;
+                let value = self.sub_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x9b => {
+                let value = self.registers.e;
+                let value = self.sub_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x9c => {
+                let value = self.registers.h;
+                let value = self.sub_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x9d => {
+                let value = self.registers.l;
+                let value = self.sub_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x9e => {
+                let value = self.read_byte(self.registers.get_hl());
+                let value = self.sub_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0x9f => {
+                let value = self.registers.a;
+                let value = self.sub_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(1)
+            },
+            0xa0 => {
+                let value = self.registers.b;
+                self.and(value);
+                self.pc.wrapping_add(1)
+            },
+            0xa1 => {
+                let value = self.registers.c;
+                self.and(value);
+                self.pc.wrapping_add(1)
+            },
+            0xa2 => {
+                let value = self.registers.d;
+                self.and(value);
+                self.pc.wrapping_add(1)
+            },
+            0xa3 => {
+                let value = self.registers.e;
+                self.and(value);
+                self.pc.wrapping_add(1)
+            },
+            0xa4 => {
+                let value = self.registers.h;
+                self.and(value);
+                self.pc.wrapping_add(1)
+            },
+            0xa5 => {
+                let value = self.registers.l;
+                self.and(value);
+                self.pc.wrapping_add(1)
+            },
+            0xa6 => {
+                let value = self.read_byte(self.registers.get_hl());
+                self.and(value);
+                self.pc.wrapping_add(1)
+            },
+            0xa7 => {
+                let value = self.registers.a;
+                self.and(value);
+                self.pc.wrapping_add(1)
+            },
+            0xa8 => {
+                let value = self.registers.b;
+                self.xor(value);
+                self.pc.wrapping_add(1)
+            },
+            0xa9 => {
+                let value = self.registers.c;
+                self.xor(value);
+                self.pc.wrapping_add(1)
+            },
+            0xaa => {
+                let value = self.registers.d;
+                self.xor(value);
+                self.pc.wrapping_add(1)
+            },
+            0xab => {
+                let value = self.registers.e;
+                self.xor(value);
+                self.pc.wrapping_add(1)
+            },
+            0xac => {
+                let value = self.registers.h;
+                self.xor(value);
+                self.pc.wrapping_add(1)
+            },
+            0xad => {
+                let value = self.registers.l;
+                self.xor(value);
+                self.pc.wrapping_add(1)
+            },
+            0xae => {
+                let value = self.read_byte(self.registers.get_hl());
+                self.xor(value);
+                self.pc.wrapping_add(1)
+            },
+            0xaf => {
+                let value = self.registers.a;
+                self.xor(value);
+                self.pc.wrapping_add(1)
+            },
+            0xb0 => {
+                let value = self.registers.b;
+                self.or(value);
                 self.pc.wrapping_add(1)
             }
-            Instruction::STOP => {
-                // Stop clock
-                panic!("TODO: implement STOP")
+            0xb1 => {
+                let value = self.registers.c;
+                self.or(value);
+                self.pc.wrapping_add(1)
             }
-            Instruction::DI => {
+            0xb2 => {
+                let value = self.registers.d;
+                self.or(value);
+                self.pc.wrapping_add(1)
+            }
+            0xb3 => {
+                let value = self.registers.e;
+                self.or(value);
+                self.pc.wrapping_add(1)
+            }
+            0xb4 => {
+                let value = self.registers.h;
+                self.or(value);
+                self.pc.wrapping_add(1)
+            }
+            0xb5 => {
+                let value = self.registers.l;
+                self.or(value);
+                self.pc.wrapping_add(1)
+            }
+            0xb6 => {
+                let value = self.read_byte(self.registers.get_hl());
+                self.or(value);
+                self.pc.wrapping_add(1)
+            }
+            0xb7 => {
+                let value = self.registers.a;
+                self.or(value);
+                self.pc.wrapping_add(1)
+            }
+            0xb8 => {
+                let value = self.registers.b;
+                self.cp(value);
+                self.pc.wrapping_add(1)
+            },
+            0xb9 => {
+                let value = self.registers.c;
+                self.cp(value);
+                self.pc.wrapping_add(1)
+            },
+            0xba => {
+                let value = self.registers.d;
+                self.cp(value);
+                self.pc.wrapping_add(1)
+            },
+            0xbb => {
+                let value = self.registers.e;
+                self.cp(value);
+                self.pc.wrapping_add(1)
+            },
+            0xbc => {
+                let value = self.registers.h;
+                self.cp(value);
+                self.pc.wrapping_add(1)
+            },
+            0xbd => {
+                let value = self.registers.l;
+                self.cp(value);
+                self.pc.wrapping_add(1)
+            },
+            0xbe => {
+                let value = self.read_byte(self.registers.get_hl());
+                self.cp(value);
+                self.pc.wrapping_add(1)
+            },
+            0xbf => {
+                let value = self.registers.a;
+                self.cp(value);
+                self.pc.wrapping_add(1)
+            },
+            0xc0 => self.return_(!self.registers.f.zero),
+            0xc1 => {
+                let value = self.pop();
+                self.registers.set_bc(value);
+                self.pc.wrapping_add(1)
+            },
+            0xc2 => self.jump(!self.registers.f.zero),
+            0xc3 => self.jump(true),
+            0xc4 => self.call(!self.registers.f.zero),
+            0xc5 => {
+                self.push(self.registers.get_bc());
+                self.pc.wrapping_add(1)
+            },
+            0xc6 => {
+                let value = self.read_next_byte();
+                let value = self.add(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(2)
+            },
+            0xc7 => {
+                self.push(self.pc);
+                self.pc = 0x0000;
+                self.pc.wrapping_add(1)
+            },
+            0xc8 => self.return_(self.registers.f.zero),
+            0xc9 => self.return_(true),
+            0xca => self.jump(self.registers.f.zero),
+            0xcc => self.call(self.registers.f.zero),
+            0xcd => self.call(true),
+            0xce => {
+                let value = self.read_next_byte();
+                let value = self.add_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(2)
+            },
+            0xcf => {
+                self.push(self.pc);
+                self.pc = 0x0008;
+                self.pc.wrapping_add(1)
+            },
+            0xd0 => self.return_(!self.registers.f.carry),
+            0xd1 => {
+                let value = self.pop();
+                self.registers.set_de(value);
+                self.pc.wrapping_add(1)
+            },
+            0xd2 => self.jump(!self.registers.f.carry),
+            0xd4 => self.call(!self.registers.f.carry),
+            0xd5 => {
+                self.push(self.registers.get_de());
+                self.pc.wrapping_add(1)
+            },
+            0xd6 => {
+                let value = self.read_next_byte();
+                let value = self.sub(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(2)
+            },
+            0xd7 => {
+                self.push(self.pc);
+                self.pc = 0x0010;
+                self.pc.wrapping_add(1)
+            },
+            0xd8 => self.return_(self.registers.f.carry),
+            0xd9 => {
+                self.return_(true);
+                self.ime = true;
+                self.pc.wrapping_add(1)
+            },
+            0xda => self.jump(self.registers.f.carry),
+            0xdc => self.call(self.registers.f.carry),
+            0xde => {
+                let value = self.read_next_byte();
+                let value = self.sub_with_carry(value);
+                self.registers.a = value;
+                self.pc.wrapping_add(2)
+            },
+            0xdf => {
+                self.push(self.pc);
+                self.pc = 0x0018;
+                self.pc.wrapping_add(1)
+            },
+            0xe0 => {
+                let address = self.read_next_byte();
+                self.write_byte(0xFF00 | address as u16, self.registers.a);
+                self.pc.wrapping_add(2)
+            },
+            0xe1 => {
+                let value = self.pop();
+                self.registers.set_hl(value);
+                self.pc.wrapping_add(1)
+            },
+            0xe2 => {
+                self.write_byte(0xFF00 | self.registers.c as u16, self.registers.a);
+                self.pc.wrapping_add(1)
+            },
+            0xe5 => {
+                self.push(self.registers.get_hl());
+                self.pc.wrapping_add(1)
+            },
+            0xe6 => {
+                let value = self.read_next_byte();
+                self.and(value);
+                self.pc.wrapping_add(2)
+            },
+            0xe7 => {
+                self.push(self.pc);
+                self.pc = 0x0020;
+                self.pc.wrapping_add(1)
+            },
+            0xe8 => {
+                let value = self.read_next_byte();
+                let value = self.add_16(value as u16);
+                self.sp = value;
+                self.pc.wrapping_add(2)
+            },
+            0xe9 => {
+                self.pc = self.registers.get_hl();
+                self.pc.wrapping_add(1)
+            },
+            0xea => {
+                let address = self.read_next_word();
+                self.write_byte(address, self.registers.a);
+                self.pc.wrapping_add(3)
+            },
+            0xee => {
+                let value = self.read_next_byte();
+                self.xor(value);
+                self.pc.wrapping_add(2)
+            },
+            0xef => {
+                self.push(self.pc);
+                self.pc = 0x0028;
+                self.pc.wrapping_add(1)
+            },
+            0xf0 => {
+                let address = self.read_next_byte();
+                self.registers.a = self.read_byte(0xFF00 | address as u16);
+                self.pc.wrapping_add(2)
+            },
+            0xf1 => {
+                let value = self.pop();
+                self.registers.set_af(value);
+                self.pc.wrapping_add(1)
+            },
+            0xf2 => {
+                self.registers.a = self.read_byte(0xFF00 | self.registers.c as u16);
+                self.pc.wrapping_add(2)
+            },
+            0xf3 => {
                 // Disable interrupts => IME = 0 and cancel any pending EI
                 self.ime = false;
                 self.pc.wrapping_add(1)
-            }
-            Instruction::EI => {
+            },
+            0xf5 => {
+                self.push(self.registers.get_af());
+                self.pc.wrapping_add(1)
+            },
+            0xf6 => {
+                let value = self.read_next_byte();
+                self.or(value);
+                self.pc.wrapping_add(2)
+            },
+            0xf7 => {
+                self.push(self.pc);
+                self.pc = 0x0030;
+                self.pc.wrapping_add(1)
+            },
+            0xf8 => {
+                let offset = self.read_next_byte() as i8 as i16 as u16;
+                self.registers.f.zero = false;
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = (self.sp & 0xF) + (offset & 0xF) > 0xF;
+                self.registers.f.carry = (self.sp & 0xFF) + (offset & 0xFF) > 0xFF;
+                self.registers.set_hl(self.sp.wrapping_add(offset));
+                self.pc.wrapping_add(2)
+            },
+            0xf9 => {
+                self.sp = self.registers.get_hl();
+                self.pc.wrapping_add(1)
+            },
+            0xfa => {
+                let address = self.read_next_word();
+                self.registers.a = self.read_byte(address);
+                self.pc.wrapping_add(3)
+            },
+            0xfb => {
                 // Schedule interrupt enable
                 self.ime_scheduled = true;
                 self.pc.wrapping_add(1)
-            }
+            },
+            0xfe => {
+                let value = self.read_next_byte();
+                self.cp(value);
+                self.pc.wrapping_add(2)
+            },
+            0xff => {
+                self.push(self.pc);
+                self.pc = 0x0038;
+                self.pc.wrapping_add(1)
+            },
 
-            Instruction::RLC(target) => {
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.rlc(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.rlc(value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.rlc(value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.rlc(value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.rlc(value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.rlc(value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.rlc(value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.rlc(value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::RRC(target) => {
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.rrc(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.rrc(value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.rrc(value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.rrc(value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.rrc(value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.rrc(value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.rrc(value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.rrc(value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::RL(target) => {
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.rl(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.rl(value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.rl(value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.rl(value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.rl(value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.rl(value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.rl(value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.rl(value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::RR(target) => {
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.rr(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.rr(value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.rr(value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.rr(value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.rr(value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.rr(value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.rr(value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.rr(value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::SLA(target) => {
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.sla(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.sla(value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.sla(value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.sla(value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.sla(value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.sla(value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.sla(value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.sla(value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::SRA(target) => {
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.sra(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.sra(value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.sra(value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.sra(value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.sra(value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.sra(value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.sra(value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.sra(value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::SWAP(target) => {
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.swap(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.swap(value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.swap(value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.swap(value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.swap(value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.swap(value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.swap(value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.swap(value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::SRL(target) => {
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.srl(value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.srl(value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.srl(value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.srl(value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.srl(value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.srl(value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.srl(value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.srl(value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::BIT(prefix_u8, target) => {
-                let bit = match prefix_u8 {
-                    PrefixU8::U0 => 0,
-                    PrefixU8::U1 => 1,
-                    PrefixU8::U2 => 2,
-                    PrefixU8::U3 => 3,
-                    PrefixU8::U4 => 4,
-                    PrefixU8::U5 => 5,
-                    PrefixU8::U6 => 6,
-                    PrefixU8::U7 => 7,
-                };
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        self.bit(bit, value);
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        self.bit(bit, value);
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        self.bit(bit, value);
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        self.bit(bit, value);
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        self.bit(bit, value);
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        self.bit(bit, value);
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        self.bit(bit, value);
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        self.bit(bit, value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::RES(prefix_u8, target) => {
-                let bit = match prefix_u8 {
-                    PrefixU8::U0 => 0,
-                    PrefixU8::U1 => 1,
-                    PrefixU8::U2 => 2,
-                    PrefixU8::U3 => 3,
-                    PrefixU8::U4 => 4,
-                    PrefixU8::U5 => 5,
-                    PrefixU8::U6 => 6,
-                    PrefixU8::U7 => 7,
-                };
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.res(bit, value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.res(bit, value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.res(bit, value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.res(bit, value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.res(bit, value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.res(bit, value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.res(bit, value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.res(bit, value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
-            Instruction::SET(prefix_u8, target) => {
-                let bit = match prefix_u8 {
-                    PrefixU8::U0 => 0,
-                    PrefixU8::U1 => 1,
-                    PrefixU8::U2 => 2,
-                    PrefixU8::U3 => 3,
-                    PrefixU8::U4 => 4,
-                    PrefixU8::U5 => 5,
-                    PrefixU8::U6 => 6,
-                    PrefixU8::U7 => 7,
-                };
-                match target {
-                    PrefixTarget::A => {
-                        let value = self.registers.a;
-                        let new_value = self.set(bit, value);
-                        self.registers.a = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::B => {
-                        let value = self.registers.b;
-                        let new_value = self.set(bit, value);
-                        self.registers.b = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::C => {
-                        let value = self.registers.c;
-                        let new_value = self.set(bit, value);
-                        self.registers.c = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::D => {
-                        let value = self.registers.d;
-                        let new_value = self.set(bit, value);
-                        self.registers.d = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::E => {
-                        let value = self.registers.e;
-                        let new_value = self.set(bit, value);
-                        self.registers.e = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::H => {
-                        let value = self.registers.h;
-                        let new_value = self.set(bit, value);
-                        self.registers.h = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::L => {
-                        let value = self.registers.l;
-                        let new_value = self.set(bit, value);
-                        self.registers.l = new_value;
-                        self.pc.wrapping_add(2)
-                    }
-                    PrefixTarget::HLI => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let new_value = self.set(bit, value);
-                        self.bus.write_byte(self.registers.get_hl(), new_value);
-                        self.pc.wrapping_add(2)
-                    }
-                }
-            }
+            _ => panic!("Unknown instruction: {:x}", byte)
         }
     }
 
+    fn read_byte(self: &mut Self, addr: u16) -> u8 {
+        let byte = self.bus.read_byte(addr);
+        // self.adv_cycles(4);
+        // self.curr_cycles += 4;
+        return byte;
+    }
+
+    fn write_byte(self: &mut Self, addr: u16, data: u8) {
+        self.bus.write_byte(addr, data);
+        // self.adv_cycles(4);
+        // self.curr_cycles += 4;
+    }
+
+    fn write_word(self: &mut Self, addr: u16, data: u16) {
+        self.bus.write_word(addr, data);
+        // self.adv_cycles(8);
+        // self.curr_cycles += 8;
+    }
+
+    pub fn set_keypad(self: &mut Self, event_pump: sdl2::EventPump) {
+        self.bus.set_keypad(event_pump);
+    }
+
+    pub fn set_mbc(self: &mut Self, cart_mbc: MbcDefault) {
+        self.bus.set_mbc(cart_mbc);
+    }
+
+    pub fn update_input(self: &mut Self) -> bool {
+        return self.bus.update_input();
+    }
+
+
     pub(crate) fn push(&mut self, value: u16) {
         self.sp = self.sp.wrapping_sub(1);
-        self.bus.write_byte(self.sp, ((value & 0xFF00) >> 8) as u8);
+        self.write_byte(self.sp, ((value & 0xFF00) >> 8) as u8);
 
         self.sp = self.sp.wrapping_sub(1);
-        self.bus.write_byte(self.sp, (value & 0xFF) as u8);
+        self.write_byte(self.sp, (value & 0xFF) as u8);
     }
 
     pub(crate) fn pop(&mut self) -> u16 {
-        let lsb = self.bus.read_byte(self.sp) as u16;
+        let lsb = self.read_byte(self.sp) as u16;
         self.sp = self.sp.wrapping_add(1);
 
-        let msb = self.bus.read_byte(self.sp) as u16;
+        let msb = self.read_byte(self.sp) as u16;
         self.sp = self.sp.wrapping_add(1);
 
         (msb << 8) | lsb
     }
 
     pub fn add(&mut self, value: u8) -> u8 {
-        let (new_value, did_overflow) = self.registers.a.overflowing_add(value);
-        self.registers.f.zero = new_value == 0;
+        let (value, did_overflow) = self.registers.a.overflowing_add(value);
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.carry = did_overflow;
         self.registers.f.half_carry = (self.registers.a & 0xF) + (value & 0xF) > 0xF;
-        new_value
+        value
     }
 
     pub fn add_16(&mut self, value: u16) -> u16 {
-        let (new_value, did_overflow) = self.registers.get_hl().overflowing_add(value);
+        let (value, did_overflow) = self.registers.get_hl().overflowing_add(value);
         self.registers.f.subtract = false;
         self.registers.f.carry = did_overflow;
         self.registers.f.half_carry = (self.registers.get_hl() & 0xFFF) + (value & 0xFFF) > 0xFFF;
-        new_value
+        value
     }
 
     pub fn add_with_carry(&mut self, value: u8) -> u8 {
         let carry = if self.registers.f.carry { 1 } else { 0 };
-        let (new_value, did_overflow) = self.registers.a.overflowing_add(value + carry);
-        self.registers.f.zero = new_value == 0;
+        let (value, did_overflow) = self.registers.a.overflowing_add(value + carry);
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.carry = did_overflow;
         self.registers.f.half_carry = (self.registers.a & 0xF) + (value & 0xF) + carry > 0xF;
-        new_value
+        value
     }
 
     pub fn sub(&mut self, value: u8) -> u8 {
-        let (new_value, did_overflow) = self.registers.a.overflowing_sub(value);
-        self.registers.f.zero = new_value == 0;
+        let (value, did_overflow) = self.registers.a.overflowing_sub(value);
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = true;
         self.registers.f.carry = did_overflow;
         self.registers.f.half_carry = (self.registers.a & 0xF) < (value & 0xF);
-        new_value
+        value
     }
 
     pub fn sub_with_carry(&mut self, value: u8) -> u8 {
         let carry = if self.registers.f.carry { 1 } else { 0 };
-        let (new_value, did_overflow) = self.registers.a.overflowing_sub(value + carry);
-        self.registers.f.zero = new_value == 0;
+        let (value, did_overflow) = self.registers.a.overflowing_sub(value + carry);
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = true;
         self.registers.f.carry = did_overflow;
         self.registers.f.half_carry = (self.registers.a & 0xF) < (value & 0xF) + carry;
-        new_value
+        value
     }
 
     pub fn cp(&mut self, value: u8) {
-        let (new_value, did_overflow) = self.registers.a.overflowing_sub(value);
-        self.registers.f.zero = new_value == 0;
+        let (value, did_overflow) = self.registers.a.overflowing_sub(value);
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = true;
         self.registers.f.carry = did_overflow;
         self.registers.f.half_carry = (self.registers.a & 0xF) < (value & 0xF);
     }
 
     pub fn and(&mut self, value: u8) {
-        let new_value = self.registers.a & value;
-        self.registers.f.zero = new_value == 0;
+        let value = self.registers.a & value;
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = true;
         self.registers.f.carry = false;
-        self.registers.a = new_value;
+        self.registers.a = value;
     }
 
     pub fn or(&mut self, value: u8) {
-        let new_value = self.registers.a | value;
-        self.registers.f.zero = new_value == 0;
+        let value = self.registers.a | value;
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = false;
-        self.registers.a = new_value;
+        self.registers.a = value;
     }
 
     pub fn xor(&mut self, value: u8) {
-        let new_value = self.registers.a ^ value;
-        self.registers.f.zero = new_value == 0;
+        let value = self.registers.a ^ value;
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = false;
-        self.registers.a = new_value;
+        self.registers.a = value;
     }
 
-    pub fn jump(&self, should_jump: bool) -> u16 {
+    pub fn jump(&mut self, should_jump: bool) -> u16 {
         if should_jump {
-            let least_significant_byte = self.bus.read_byte(self.pc + 1) as u16;
-            let most_significant_byte = self.bus.read_byte(self.pc + 2) as u16;
+            let least_significant_byte = self.read_byte(self.pc + 1) as u16;
+            let most_significant_byte = self.read_byte(self.pc + 2) as u16;
             (most_significant_byte << 8) | least_significant_byte
-        } else {self.pc.wrapping_add(3)
+        } else {
+            self.pc.wrapping_add(3)
         }
     }
 
@@ -1818,94 +1442,94 @@ impl CPU {
     }
 
     fn read_next_word(&mut self) -> u16 {
-        let least_significant_byte = self.bus.read_byte(self.pc + 1) as u16;
-        let most_significant_byte = self.bus.read_byte(self.pc + 2) as u16;
+        let least_significant_byte = self.read_byte(self.pc + 1) as u16;
+        let most_significant_byte = self.read_byte(self.pc + 2) as u16;
         (most_significant_byte << 8) | least_significant_byte
     }
 
     pub(crate) fn read_next_byte(&mut self) -> u8 {
-        let byte = self.bus.read_byte(self.pc);
+        let byte = self.read_byte(self.pc);
         // self.pc = self.pc.wrapping_add(1);
         byte
     }
 
     fn rlc(&mut self, value: u8) -> u8 {
         let did_overflow = value & 0x80 == 0x80;
-        let new_value = (value << 1) | (if did_overflow { 1 } else { 0 });
-        self.registers.f.zero = new_value == 0;
+        let value = (value << 1) | (if did_overflow { 1 } else { 0 });
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = did_overflow;
-        new_value
+        value
     }
 
     fn rl(&mut self, value: u8) -> u8 {
         let did_overflow = value & 0x80 == 0x80;
-        let new_value = (value << 1) | (if self.registers.f.carry { 1 } else { 0 });
-        self.registers.f.zero = new_value == 0;
+        let value = (value << 1) | (if self.registers.f.carry { 1 } else { 0 });
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = did_overflow;
-        new_value
+        value
     }
 
     fn rrc(&mut self, value: u8) -> u8 {
         let did_overflow = value & 0x01 == 0x01;
-        let new_value = (value >> 1) | (if did_overflow { 0x80 } else { 0 });
-        self.registers.f.zero = new_value == 0;
+        let value = (value >> 1) | (if did_overflow { 0x80 } else { 0 });
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = did_overflow;
-        new_value
+        value
     }
 
     fn rr(&mut self, value: u8) -> u8 {
         let did_overflow = value & 0x01 == 0x01;
-        let new_value = (value >> 1) | (if self.registers.f.carry { 0x80 } else { 0 });
-        self.registers.f.zero = new_value == 0;
+        let value = (value >> 1) | (if self.registers.f.carry { 0x80 } else { 0 });
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = did_overflow;
-        new_value
+        value
     }
 
     fn sla(&mut self, value: u8) -> u8 {
         let did_overflow = value & 0x80 == 0x80;
-        let new_value = value << 1;
-        self.registers.f.zero = new_value == 0;
+        let value = value << 1;
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = did_overflow;
-        new_value
+        value
     }
 
     fn sra(&mut self, value: u8) -> u8 {
         let did_overflow = value & 0x01 == 0x01;
-        let new_value = (value >> 1) | (value & 0x80);
-        self.registers.f.zero = new_value == 0;
+        let value = (value >> 1) | (value & 0x80);
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = did_overflow;
-        new_value
+        value
     }
 
     fn swap(&mut self, value: u8) -> u8 {
-        let new_value = ((value & 0xF0) >> 4) | ((value & 0x0F) << 4);
-        self.registers.f.zero = new_value == 0;
+        let value = ((value & 0xF0) >> 4) | ((value & 0x0F) << 4);
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = false;
-        new_value
+        value
     }
 
     fn srl(&mut self, value: u8) -> u8 {
         let did_overflow = value & 0x01 == 0x01;
-        let new_value = value >> 1;
-        self.registers.f.zero = new_value == 0;
+        let value = value >> 1;
+        self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.f.carry = did_overflow;
-        new_value
+        value
     }
 
     fn bit(&mut self, bit: u8, value: u8) {
