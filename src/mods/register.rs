@@ -3,7 +3,7 @@ use crate::mods::flag_register::FlagsRegister;
 pub struct Registers {
     pub a: u8,
     pub b: u8,
-    pub(crate) c: u8,
+    pub c: u8,
     pub d: u8,
     pub e: u8,
     pub f: FlagsRegister, // Flags register
@@ -13,9 +13,29 @@ pub struct Registers {
 
 impl Registers {
 
-    /*
-     * The following functions are used to access the registers as 16-bit values.
-     */
+    pub fn new() -> Registers {
+        Registers {
+            a: 0x00,
+            b: 0x00,
+            c: 0x00,
+            d: 0x00,
+            e: 0x00,
+            f: FlagsRegister::new(),
+            h: 0x00,
+            l: 0x00,
+        }
+    }
+
+    pub fn init(self: &mut Self, checksum: u8) {
+        if checksum == 0x00 {
+            self.set_af(0x0180);
+        } else {
+            self.set_af(0x01B0);
+        }
+        self.set_bc(0x0013);
+        self.set_de(0x00D8);
+        self.set_hl(0x014D);
+    }
 
     fn get_af(&self) -> u16 {
         (self.a as u16) << 8 | u8::from(self.f.clone()) as u16
@@ -35,10 +55,6 @@ impl Registers {
         (self.h as u16) << 8
             | self.l as u16
     }
-
-    /*
-     * The following functions are used to set the registers as 16-bit values.
-     */
 
     fn set_af(&mut self, value: u16) {
         self.a = ((value & 0xFF00) >> 8) as u8;

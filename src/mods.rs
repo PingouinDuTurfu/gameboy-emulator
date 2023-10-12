@@ -4,3 +4,8 @@ pub mod flag_register;
 pub mod register;
 pub(crate) mod bus;
 pub(crate) mod keypad;
+mod mbc_default;
+mod cartridge;
+mod memory;
+mod input_output;
+pub(crate) mod emulator;

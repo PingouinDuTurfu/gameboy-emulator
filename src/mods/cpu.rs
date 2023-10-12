@@ -1,17 +1,17 @@
 use std::fmt::{Display, Formatter, Result};
 use std::ops::Add;
 
+use crate::mods::bus::Bus;
 use crate::mods::enum_instructions::{AddType, Arithmetic16Target, ArithmeticTarget, IncDecTarget, Instruction, JumpTest, JumpTestWithHLI, LoadByteSource, LoadByteTarget, LoadType, LoadWordSource, LoadWordTarget, PrefixTarget, PrefixU8, RstTarget, StackTarget};
 use crate::mods::flag_register::FlagsRegister;
-use crate::mods::keypad::Keypad;
-use crate::mods::bus::Bus;
+use crate::mods::mbc_default::MbcDefault;
 use crate::mods::register::Registers;
 
 pub struct CPU {
     pub registers: Registers,
+    pub bus: Bus,
     pub pc: u16,
     pub sp: u16,
-    pub bus: Bus,
     pub halted: bool,
     pub ime: bool,
     pub ime_scheduled: bool,
@@ -31,13 +31,18 @@ impl CPU {
                 h: 0,
                 l: 0,
             },
-            pc: 0,
+            pc: 0x0100,
             sp: 0xFFFE,
             bus: Bus::new(),
             halted: false,
             ime: false,
             ime_scheduled: false,
         }
+    }
+
+    pub fn init(&mut self, checksum: u8) {
+        self.registers.init(checksum);
+        self.bus.init();
     }
 
     pub(crate) fn step(&mut self, debug: bool) {
@@ -60,6 +65,55 @@ impl CPU {
         };
 
         self.pc = next_pc;
+    }
+
+    pub fn check_interrupts(&mut self) {
+        if self.halted && self.bus.interrupt_pending() {
+            self.halted = false;
+        }
+        if self.ime && self.bus.interrupt_pending() {
+            self.handle_interrupt();
+        }
+    }
+
+    fn handle_interrupt(&mut self) {
+        let i_enable = self.read_addr(0xFFFF);
+        let mut if_register_trigger = self.read_addr(0xFF0F);
+        self.ime = false;
+        self.halted = false;
+
+        for i in 0..=4 {
+            if i_enable & if_register_trigger & (0x01 << i) == (0x01 << i) {
+                if_register_trigger = if_register_trigger & !(0x01 << i);
+                self.write_byte(0xFF0F, if_register_trigger);
+
+                self.push(self.pc);
+
+                self.pc = 0x0040 + (0x0008 * i);
+                break;
+            }
+        }
+    }
+
+    fn read_addr(self: &mut Self, addr: u16) -> u8 {
+        let byte = self.bus.read_byte(addr);
+        // self.adv_cycles(4);
+        // self.curr_cycles += 4;
+        return byte;
+    }
+
+    fn write_byte(self: &mut Self, addr: u16, data: u8) {
+        self.bus.write_byte(addr, data);
+        // self.adv_cycles(4);
+        // self.curr_cycles += 4;
+    }
+
+    pub fn set_keypad(self: &mut Self, event_pump: sdl2::EventPump) {
+        self.bus.set_keypad(event_pump);
+    }
+
+    pub fn set_mbc(self: &mut Self, cart_mbc: MbcDefault) {
+        self.bus.set_mbc(cart_mbc);
     }
 
     pub fn execute(&mut self, instruction: Instruction) -> u16 {
