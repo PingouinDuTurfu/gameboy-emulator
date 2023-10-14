@@ -9,3 +9,5 @@ mod cartridge;
 mod memory;
 mod input_output;
 pub(crate) mod emulator;
+mod serial;
+pub mod to_remvoe;

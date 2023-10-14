@@ -52,7 +52,7 @@ impl Keypad {
     }
 
     pub fn write_byte(self: &mut Self, address: u16, data: u8) {
-        println!("rfytguhijolp");
+        println!("rdhkpl^mlkojihguytfrdfyguhijkojhbgfc");
         match address {
             KEYPAD_REGISTER => {
                 print!("Keypad write: {:02X} => ", data);

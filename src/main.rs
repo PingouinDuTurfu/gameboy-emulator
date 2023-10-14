@@ -1,11 +1,9 @@
 extern crate sdl2;
 
-use std::fs::File;
-use std::io::{Read, Seek};
-
 use mods::emulator::Emulator;
 
 mod mods;
+mod print_debug;
 
 fn main() {
 

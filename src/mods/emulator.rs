@@ -1,18 +1,29 @@
 use std::fs::File;
 use std::io::BufWriter;
+
 use sdl2::{Sdl, VideoSubsystem};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
+use once_cell::unsync::Lazy;
+
 use crate::mods::cartridge::Cartridge;
 use crate::mods::cpu::CPU;
+use crate::mods::to_remvoe::gpu_memory::BYTES_PER_PIXEL;
+use crate::print_debug::PrintDebug;
 
 pub const SCALE: u32 = 3;
 pub const NUM_PIXELS_X: u32 = 160;
 pub const NUM_PIXELS_Y: u32 = 144;
 pub const TOTAL_PIXELS: usize = (NUM_PIXELS_X * NUM_PIXELS_Y) as usize;
 
+pub const NUM_PIXEL_BYTES: usize = TOTAL_PIXELS * BYTES_PER_PIXEL;
+
 pub const SCREEN_WIDTH: u32 = NUM_PIXELS_X * SCALE; // Only used by the window and rect (not in the texture)
 pub const SCREEN_HEIGHT: u32 = NUM_PIXELS_Y * SCALE; // Only used by the window and rect (not in the texture)
+pub static mut PRINT_DEBUG: PrintDebug = PrintDebug {debug: false,
+        data: String::new(),
+        global_index: 0,
+        index: 0,};
 
 pub struct Emulator {
     cpu: CPU,
@@ -88,6 +99,13 @@ impl Emulator {
         let mut counter: u128 = 0;
 
         loop {
+            unsafe {
+                PRINT_DEBUG.increment_index();
+                if PRINT_DEBUG.index >= 1000 {
+                    PRINT_DEBUG.save_data();
+                }
+            }
+
             if self.cpu.update_input() {
                 // Is true when we get the exit signal
                 break;
@@ -96,7 +114,7 @@ impl Emulator {
 
             if !self.cpu.halted {
                 // self.cpu.curr_cycles = 0;
-                self.cpu.step(false);
+                self.cpu.step(true);
             } else {
                 // Halted
                 // self.cpu.curr_cycles = 4;

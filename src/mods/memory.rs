@@ -7,8 +7,8 @@ pub const HRAM_END: u16 = 0xFFFE;
 
 pub struct Memory {
     mbc: MbcDefault,
-    wram: [u8; 8_192],               // 0xC000 - 0xDFFF
-    hram: [u8; 127],                 // 0xFF80 - 0xFFFE
+    wram: [u8; 0x2000],              // 0xC000 - 0xDFFF
+    hram: [u8; 0x7F],                // 0xFF80 - 0xFFFE
     pub(crate) interrupt_enable: u8, // Registre IE 0xFFFF
 }
 
@@ -20,6 +20,10 @@ impl Memory {
             interrupt_enable: 0,
             hram: [0; 0x7F],
         }
+    }
+
+    pub fn init(self: &mut Self) {
+        self.interrupt_enable = 0x00;
     }
 
     pub fn set_mbc(self: &mut Self, cart_mbc: MbcDefault) {
