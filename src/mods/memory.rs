@@ -53,4 +53,15 @@ impl Memory {
             _ => panic!("TODO : Memory does not handle write to: {:04X}", address),
         };
     }
+
+    pub fn read_byte_for_dma(self: &Self, addr: u16) -> u8 {
+        let byte = match addr {
+            ROM_START..=ROM_END => self.mbc.read_rom_byte(addr),
+            RAM_START..=RAM_END => self.mbc.read_ram_byte(addr),
+            WRAM_START..=WRAM_END => self.wram[usize::from(addr - WRAM_START)],
+            HRAM_START..=HRAM_END => self.hram[usize::from(addr - HRAM_START)],
+            _ => panic!("TODO : Memory does not handle reads from: {:04X}", addr),
+        };
+        return byte;
+    }
 }

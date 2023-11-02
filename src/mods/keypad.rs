@@ -1,6 +1,7 @@
 use sdl2::event::Event;
 use sdl2::EventPump;
 use sdl2::keyboard::Keycode;
+use crate::mods::emulator::PRINT_DEBUG;
 
 pub const KEYPAD_REGISTER: u16 = 0xFF00;
 
@@ -52,10 +53,11 @@ impl Keypad {
     }
 
     pub fn write_byte(self: &mut Self, address: u16, data: u8) {
-        println!("rdhkpl^mlkojihguytfrdfyguhijkojhbgfc");
         match address {
             KEYPAD_REGISTER => {
-                print!("Keypad write: {:02X} => ", data);
+                unsafe {
+                    PRINT_DEBUG.add_data(format!("Keypad write: {:02X}\n", data));
+                }
                 self.data = (data & 0x30) | (self.data & 0xCF);
                 self.something_selected = (self.data & 0x20 == 0x20) ^ (self.data & 0x10 == 0x10);
             }
@@ -82,7 +84,8 @@ impl Keypad {
 
             if let Some(e) = event {
                 match e {
-                    Event::Quit { .. } | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    Event::Quit { .. } | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => unsafe {
+                        // PRINT_DEBUG.save_data();
                         should_exit = true;
                     }
                     Event::KeyDown { keycode: Some(x), .. } => {

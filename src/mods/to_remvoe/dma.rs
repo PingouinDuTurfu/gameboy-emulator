@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::mods::bus::BusType;
-use crate::mods::to_remvoe::gpu_memory::{OAM_END, OAM_START, VRAM_END, VRAM_START};
+use crate::mods::gpu_memory::{OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMORY_START, VIDEO_RAM_END, VIDEO_RAM_START};
 use crate::mods::to_remvoe::graphics::Graphics;
 
 
@@ -88,21 +88,21 @@ impl OamDma {
     }
 
     // Range of cycles should be: 0x00 - 0x9F
-    // pub fn cycles(self: &Self) -> u16 {
-    //     return self.cycles;
-    // }
+    pub fn cycles(self: &Self) -> u16 {
+        return self.cycles;
+    }
 
     pub fn delay_rem(self: &Self) -> usize {
         return self.delay_cycles;
     }
-    //
-    // pub fn incr_cycles(self: &mut Self, graphics: &mut Graphics) {
-    //     self.cycles += 1;
-    //     if self.cycles > DMA_MAX_CYCLES as u16 {
-    //         self.stop_dma_transfer();
-    //         graphics.set_dma_transfer(false);
-    //     }
-    // }
+
+    pub fn incr_cycles(self: &mut Self, graphics: &mut Graphics) {
+        self.cycles += 1;
+        if self.cycles > DMA_MAX_CYCLES as u16 {
+            self.stop_dma_transfer();
+            graphics.set_dma_transfer(false);
+        }
+    }
 
     pub fn stop_dma_transfer(self: &mut Self) {
         self.in_transfer = false;
@@ -123,7 +123,7 @@ impl OamDma {
         self.cycles = 0;
 
         self.bus_conflict = match self.calc_addr() {
-            VRAM_START..=VRAM_END => BusType::Video,
+            VIDEO_RAM_START..=VIDEO_RAM_END => BusType::Video,
             0x0000..=0x7FFF | 0xA000..=0xFDFF => BusType::External,
             _ => panic!(
                 "addr should be between 0x0000 and 0xFDFF: dma: {}",
@@ -146,9 +146,9 @@ impl OamDma {
     pub fn check_bus_conflicts(self: &Self, addr: u16) -> Option<u8> {
         return if self.has_conflict() && self.in_transfer {
             match (addr, &self.bus_conflict) {
-                (VRAM_START..=VRAM_END, BusType::Video) => Some(self.value),
+                (VIDEO_RAM_START..=VIDEO_RAM_END, BusType::Video) => Some(self.value),
                 (0x0000..=0x7FFF | 0xA000..=0xFDFF, BusType::External) => Some(self.value),
-                (OAM_START..=OAM_END, _conflict) => Some(0xFF),
+                (OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END, _conflict) => Some(0xFF),
                 _ => None,
             }
         } else {

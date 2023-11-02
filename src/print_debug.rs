@@ -3,20 +3,26 @@ pub struct PrintDebug {
     pub data: String,
     pub global_index: u64,
     pub index: u64,
+    pub already_printed_vram: bool,
 }
 
 impl PrintDebug {
-    pub fn new() -> PrintDebug {
-        PrintDebug {
-            debug: false,
-            data: String::new(),
-            global_index: 0,
-            index: 0,
-        }
-    }
 
     pub fn add_data(self: &mut Self, data: String) {
         self.data.push_str(&data);
+    }
+
+    pub fn add_vram_table_data(self: &mut Self, data: [u8; (0x9FFF - 0x8000) as usize + 1]) {
+        if self.already_printed_vram {
+            return;
+        }
+        self.already_printed_vram = true;
+        for i in 0..data.len() {
+            self.data.push_str(&format!("{:02X} ", data[i]));
+            if i % 16 == 15 {
+                self.data.push_str("\n");
+            }
+        }
     }
 
     pub fn save_data(self: &mut Self) {
@@ -25,7 +31,7 @@ impl PrintDebug {
         let mut file = File::create("output.txt").expect("Impossible de créer le fichier");
         self.index = 0;
         match file.write_all(self.data.as_bytes()) {
-            Ok(_) => println!("La chaîne a été écrite avec succès dans le fichier."),
+            Ok(_) => (),
             Err(e) => eprintln!("Erreur lors de l'écriture dans le fichier : {}", e),
         }
     }

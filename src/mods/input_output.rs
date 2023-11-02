@@ -38,24 +38,24 @@ impl InputOutput {
     }
 
     pub fn clean_if_register_trigger(self: &mut Self) {
-        println!("Requestiong clean IF register");
+        // println!("Requestiong clean IF register");
         self.if_register_trigger = false;
     }
 
     pub fn request_keypad_interrupt(self: &mut Self) {
-        println!("Requestiong keypad interrupt");
+        // println!("Requestiong keypad interrupt");
         let if_register_trigger = usize::from(IF_REG - IO_START);
         self.io[if_register_trigger] = self.io[if_register_trigger] | 0xF0;
     }
 
     pub fn request_serial_interrupt(self: &mut Self) {
-        println!("Requesting serial interrupt");
+        // println!("Requesting serial interrupt");
         let if_register_trigger = usize::from(IF_REG - IO_START);
         self.io[if_register_trigger] = self.io[if_register_trigger] | 0xE8;
     }
 
     pub fn request_timer_interrupt(self: &mut Self) {
-        println!("Requesting timer interrupt");
+        // println!("Requesting timer interrupt");
         if !self.if_register_trigger {
             let if_register_trigger = usize::from(IF_REG - IO_START);
             self.io[if_register_trigger] = self.io[if_register_trigger] | 0xE4;
@@ -63,13 +63,13 @@ impl InputOutput {
     }
 
     pub fn request_stat_interrupt(self: &mut Self) {
-        println!("Requesting stat interrupt");
+        // println!("Requesting stat interrupt");
         let if_register_trigger = usize::from(IF_REG - IO_START);
         self.io[if_register_trigger] = self.io[if_register_trigger] | 0xE2;
     }
 
     pub fn request_vblank_interrupt(self: &mut Self) {
-        println!("Requesting vblank interrupt");
+        // println!("Requesting vblank interrupt");
         let if_register_trigger = usize::from(IF_REG - IO_START);
         self.io[if_register_trigger] = self.io[if_register_trigger] | 0xE1;
     }

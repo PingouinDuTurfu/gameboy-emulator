@@ -1,12 +1,14 @@
-use crate::mods::to_remvoe::gpu_memory::{GpuMemory, OAM_END, OAM_START, UNUSED_END, UNUSED_START, VRAM_END, VRAM_START};
-use crate::mods::to_remvoe::picture_generation::PictureGeneration;
-use crate::mods::to_remvoe::ppu::{MODE_PICTGEN, PpuState};
+use crate::mods::emulator::PRINT_DEBUG;
+use crate::mods::gpu_memory::{GpuMemory, OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMORY_START, UNUSED_END, UNUSED_START, VIDEO_RAM_END, VIDEO_RAM_START};
+use crate::mods::physics_processing_unit::{MODE_PICTURE_GENERATION, PhysicsProcessingUnitState};
+use crate::mods::picture_generation::PictureGeneration;
+use crate::mods::sprite::Sprite;
 
-pub struct ObjectAccessMemorySearch {
+pub struct ObjectAttributMemorySearch {
     cycles_counter: usize,
 }
 
-impl ObjectAccessMemorySearch {
+impl ObjectAttributMemorySearch {
     pub const MAX_CYCLES: usize = 80;
     const MAX_SPRITES: usize = 40;
     const MAX_SCANLINE_SPRITES: usize = 10;
@@ -14,24 +16,24 @@ impl ObjectAccessMemorySearch {
 
     // Each scanline does an OAM scan during which time we need to determine
     // which sprites should be displayed. (Max of 10 per scan line).
-    pub fn new() -> PpuState {
-        return PpuState::OamSearch(ObjectAccessMemorySearch { cycles_counter: 0 });
+    pub fn new() -> PhysicsProcessingUnitState {
+        return PhysicsProcessingUnitState::ObjectAttributeMemory(ObjectAttributMemorySearch { cycles_counter: 0 });
     }
 
     // oamsearch may return itself or picturegeneration
-    fn next(self: Self, gpu_mem: &mut GpuMemory) -> PpuState {
-        if self.cycles_counter < ObjectAccessMemorySearch::MAX_CYCLES {
-            return PpuState::OamSearch(self);
+    fn next(self: Self, gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {
+        if self.cycles_counter < ObjectAttributMemorySearch::MAX_CYCLES {
+            return PhysicsProcessingUnitState::ObjectAttributeMemory(self);
         } else {
-            gpu_mem.set_stat_mode(MODE_PICTGEN);
+            gpu_mem.set_stat_mode(MODE_PICTURE_GENERATION);
 
             // https://gbdev.io/pandocs/pixel_fifo.html#mode-3-operation
-            gpu_mem.bg_pixel_fifo.clear();
-            return PpuState::PictureGeneration(PictureGeneration::new());
+            gpu_mem.background_pixel_fifo.clear();
+            return PhysicsProcessingUnitState::PictureGeneration(PictureGeneration::new());
         }
     }
 
-    pub fn render(mut self, gpu_mem: &mut GpuMemory, cycles: usize) -> PpuState {
+    pub fn render(mut self, gpu_mem: &mut GpuMemory, cycles: usize) -> PhysicsProcessingUnitState {
         let entries_todo = cycles / 2;
         let entries_done = self.cycles_counter / 2;
 
@@ -43,8 +45,8 @@ impl ObjectAccessMemorySearch {
 
     pub fn read_byte(self: &Self, gpu_mem: &GpuMemory, addr: u16) -> u8 {
         return match addr {
-            VRAM_START..=VRAM_END => gpu_mem.vram[usize::from(addr - VRAM_START)],
-            OAM_START..=OAM_END => 0xFF,
+            VIDEO_RAM_START..=VIDEO_RAM_END => gpu_mem.video_ram[usize::from(addr - VIDEO_RAM_START)],
+            OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => 0xFF,
             UNUSED_START..=UNUSED_END => 0xFF,
             _ => panic!("PPU (O Search) doesnt read from address: {:04X}", addr),
         };
@@ -52,8 +54,15 @@ impl ObjectAccessMemorySearch {
 
     pub fn write_byte(self: &mut Self, gpu_mem: &mut GpuMemory, addr: u16, data: u8) {
         match addr {
-            VRAM_START..=VRAM_END => gpu_mem.vram[usize::from(addr - VRAM_START)] = data,
-            OAM_START..=OAM_END => return,
+            VIDEO_RAM_START..=VIDEO_RAM_END => {
+                unsafe {
+                    if data != 0x00 {
+                        // PRINT_DEBUG.add_data(format!("WRITE_TO_VRAM OAM {:04X} {:02X}\n", addr, data));
+                    }
+                }
+                gpu_mem.video_ram[usize::from(addr - VIDEO_RAM_START)] = data
+            },
+            OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => return,
             UNUSED_START..=UNUSED_END => return,
             _ => panic!("PPU (O Search) doesnt write to address: {:04X}", addr),
         }
@@ -81,8 +90,8 @@ impl ObjectAccessMemorySearch {
         for i in 0..entries_todo {
             let curr_entry = (entries_done + i) * 4;
 
-            if gpu_mem.sprite_list.len() == ObjectAccessMemorySearch::MAX_SCANLINE_SPRITES
-                || curr_entry >= ObjectAccessMemorySearch::OAM_LENGTH
+            if gpu_mem.sprite_list.len() == ObjectAttributMemorySearch::MAX_SCANLINE_SPRITES
+                || curr_entry >= ObjectAttributMemorySearch::OAM_LENGTH
             {
                 break;
             }
@@ -90,12 +99,12 @@ impl ObjectAccessMemorySearch {
             // DMA transfer overrides mode-2 access to OAM. (Reads to OAM return 0xFF)
             // During dma transfer the sprites wont appear on the screen since gpu_mem.ly + 16
             // can never be greater than or equal to 255.
-            if gpu_mem.dma_transfer {
+            if gpu_mem.direct_memory_access_transfer {
                 ypos = 0xFF;
                 xpos = 0xFF
             } else {
-                ypos = gpu_mem.oam[curr_entry];
-                xpos = gpu_mem.oam[curr_entry + 1];
+                ypos = gpu_mem.object_attribute_memory[curr_entry];
+                xpos = gpu_mem.object_attribute_memory[curr_entry + 1];
             }
 
             sprite_height = 8; // I think this is the only part that can change mid scanline
@@ -108,42 +117,16 @@ impl ObjectAccessMemorySearch {
                 for sprite in gpu_mem.sprite_list.iter() {
                     // https://gbdev.io/pandocs/OAM.html#drawing-priority
                     idx += 1;
-                    if sprite.xpos > xpos {
+                    if sprite.x_pos > xpos {
                         idx -= 1;
                         break;
                     }
                 }
                 gpu_mem.sprite_list.insert(
                     idx,
-                    Sprite::new(&gpu_mem.oam[curr_entry..(curr_entry + 4)], sprite_height),
+                    Sprite::new(&gpu_mem.object_attribute_memory[curr_entry..(curr_entry + 4)]),
                 );
             }
         }
-    }
-}
-
-pub struct Sprite {
-    pub ypos: u8,
-    pub xpos: u8,
-    pub tile_index: u8, // 0x00 - 0xFF indexing from 0x8000 - 0x8FFF
-    pub bgw_ontop: bool,
-    pub flip_y: bool,
-    pub flip_x: bool,
-    pub palette_no: bool,
-    pub height: u8,
-}
-
-impl Sprite {
-    pub fn new(sprite_bytes: &[u8], sprite_height: u8) -> Sprite {
-        return Sprite {
-            ypos: sprite_bytes[0],
-            xpos: sprite_bytes[1],
-            tile_index: sprite_bytes[2],
-            bgw_ontop: (sprite_bytes[3] >> 7) & 0x01 == 0x01,
-            flip_y: (sprite_bytes[3] >> 6) & 0x01 == 0x01,
-            flip_x: (sprite_bytes[3] >> 5) & 0x01 == 0x01,
-            palette_no: (sprite_bytes[3] >> 4) & 0x01 == 0x01,
-            height: sprite_height, // Dont actually care about this
-        };
     }
 }

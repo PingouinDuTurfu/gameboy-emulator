@@ -1,4 +1,5 @@
 use sdl2::EventPump;
+use sdl2::render::Texture;
 
 use crate::mods::to_remvoe::graphics::Graphics;
 use crate::mods::to_remvoe::dma::{DMA_REG, OamDma};
@@ -7,7 +8,7 @@ use crate::mods::keypad::{Keypad, KEYPAD_REGISTER};
 use crate::mods::mbc_default::MbcDefault;
 use crate::mods::memory::Memory;
 use crate::mods::serial::{SB_REG, SC_REG, Serial};
-use crate::mods::to_remvoe::gpu_memory::{OAM_END, OAM_START, PPUIO_END, PPUIO_START, UNUSED_END, UNUSED_START, VRAM_END, VRAM_START};
+use crate::mods::gpu_memory::{OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMORY_START, PHYSICS_PROCESSING_UNIT_IO_END, PHYSICS_PROCESSING_UNIT_IO_START, UNUSED_END, UNUSED_START, VIDEO_RAM_END, VIDEO_RAM_START};
 
 pub enum BusType {
     Video,    //0x8000-0x9FFF
@@ -62,12 +63,12 @@ impl Bus {
 
     pub fn read_byte(&self, address: u16) -> u8 {
         match address {
-            VRAM_START..=VRAM_END => self.graphics.read_byte(address),
-            OAM_START..=OAM_END => self.graphics.read_byte(address),
+            VIDEO_RAM_START..=VIDEO_RAM_END => self.graphics.read_byte(address),
+            OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => self.graphics.read_byte(address),
             KEYPAD_REGISTER => self.keypad.read_byte(address),
             DMA_REG => self.oam_dma.read_dma(address),
             UNUSED_START..=UNUSED_END => self.graphics.read_byte(address),
-            PPUIO_START..=PPUIO_END => self.graphics.read_io_byte(address),
+            PHYSICS_PROCESSING_UNIT_IO_START..=PHYSICS_PROCESSING_UNIT_IO_END => self.graphics.read_io_byte(address),
             0xFF10..=0xFF2F => 0x0000,
             SB_REG | SC_REG => self.serial.read_byte(address),
             0xFF03..=0xFF0F => self.input_output.read_byte(address),
@@ -78,16 +79,16 @@ impl Bus {
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
         // println!("Bus : Write to {:04X} : {:02X}", address, value);
-        if address == KEYPAD_REGISTER {
-            println!("Keypad write: {:02X} => ", value)
-        }
+        // if address == KEYPAD_REGISTER {
+        //     println!("Keypad write: {:02X} => ", value)
+        // }
         match address {
-            VRAM_START..=VRAM_END => self.graphics.write_byte(address, value),
-            OAM_START..=OAM_END => self.graphics.write_byte(address, value),
+            VIDEO_RAM_START..=VIDEO_RAM_END => self.graphics.write_byte(address, value),
+            OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => self.graphics.write_byte(address, value),
             KEYPAD_REGISTER => self.keypad.write_byte(address, value),
             DMA_REG => self.oam_dma.write_dma(address, value),
             UNUSED_START..=UNUSED_END => self.graphics.write_byte(address, value),
-            PPUIO_START..=PPUIO_END => self.graphics.write_io_byte(address, value),
+            PHYSICS_PROCESSING_UNIT_IO_START..=PHYSICS_PROCESSING_UNIT_IO_END => self.graphics.write_io_byte(address, value),
             0xFF10..=0xFF2F => (),
             SB_REG | SC_REG => self.serial.write_byte(address, value),
             0xFF03..=0xFF0F => self.input_output.write_byte(address, value),
@@ -126,11 +127,48 @@ impl Bus {
         // self.memory.adv_cycles(cycles);
         // self.sound.adv_cycles(cycles);
         //
-        // if self.oam_dma.dma_active() {
-        //     self.handle_dma_transfer();
-        // }
-        // if self.oam_dma.delay_rem() > 0 {
-        //     self.oam_dma.decr_delay(&mut self.graphics);
-        // }
+        if self.oam_dma.dma_active() {
+            self.handle_dma_transfer();
+        }
+        if self.oam_dma.delay_rem() > 0 {
+            self.oam_dma.decr_delay(&mut self.graphics);
+        }
+    }
+
+    fn handle_dma_transfer(self: &mut Self) {
+        let addr = self.oam_dma.calc_addr();
+        let value = self.read_byte_for_dma(addr);
+
+        self.oam_dma.set_value(value);
+        self.write_byte_for_dma(self.oam_dma.cycles(), value);
+        self.oam_dma.incr_cycles(&mut self.graphics);
+    }
+
+    fn read_byte_for_dma(self: &Self, addr: u16) -> u8 {
+        let byte = match addr {
+            VIDEO_RAM_START..=VIDEO_RAM_END => self.graphics.read_byte_for_dma(addr),
+            OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => self.graphics.read_byte_for_dma(addr),
+            DMA_REG => self.oam_dma.read_dma(addr),
+            UNUSED_START..=UNUSED_END => self.graphics.read_byte_for_dma(addr),
+            KEYPAD_REGISTER => self.keypad.read_byte(addr),
+            SB_REG | SC_REG => self.serial.read_byte(addr),
+            // TIMER_START..=TIMER_END => self.timer.read_byte(addr),
+            // SOUND_START..=SOUND_END => self.sound.read_byte(addr),
+            // PCM12 | PCM34 => self.sound.read_byte(addr),
+            // WAVE_RAM_START..=WAVE_RAM_END => self.sound.read_byte(addr),
+            0xFF03..=0xFF0F => self.input_output.read_byte(addr),
+            0xFF4C..=0xFF7F => self.input_output.read_byte(addr),
+            _ => self.memory.read_byte_for_dma(addr),
+        };
+        return byte;
+    }
+
+    // dma should be allowed to write to oam regardless of ppu state
+    // use this function to bypass any protections
+    fn write_byte_for_dma(self: &mut Self, addr: u16, data: u8) {
+        self.graphics.write_byte_for_dma(addr, data);
+    }
+    pub fn update_display(self: &mut Self, texture: &mut Texture) -> bool {
+        return self.graphics.update_display(texture);
     }
 }

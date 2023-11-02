@@ -5,25 +5,24 @@ use sdl2::{Sdl, VideoSubsystem};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
 use once_cell::unsync::Lazy;
+use sdl2::render::TextureAccess;
 
 use crate::mods::cartridge::Cartridge;
 use crate::mods::cpu::CPU;
-use crate::mods::to_remvoe::gpu_memory::BYTES_PER_PIXEL;
 use crate::print_debug::PrintDebug;
 
 pub const SCALE: u32 = 3;
 pub const NUM_PIXELS_X: u32 = 160;
 pub const NUM_PIXELS_Y: u32 = 144;
-pub const TOTAL_PIXELS: usize = (NUM_PIXELS_X * NUM_PIXELS_Y) as usize;
-
-pub const NUM_PIXEL_BYTES: usize = TOTAL_PIXELS * BYTES_PER_PIXEL;
-
-pub const SCREEN_WIDTH: u32 = NUM_PIXELS_X * SCALE; // Only used by the window and rect (not in the texture)
-pub const SCREEN_HEIGHT: u32 = NUM_PIXELS_Y * SCALE; // Only used by the window and rect (not in the texture)
+pub const TOTAL_PIXELS: u32 = NUM_PIXELS_X * NUM_PIXELS_Y;
+pub const SCREEN_WIDTH: u32 = NUM_PIXELS_X * SCALE;
+pub const SCREEN_HEIGHT: u32 = NUM_PIXELS_Y * SCALE;
 pub static mut PRINT_DEBUG: PrintDebug = PrintDebug {debug: false,
         data: String::new(),
         global_index: 0,
-        index: 0,};
+        index: 0,
+        already_printed_vram: false
+};
 
 pub struct Emulator {
     cpu: CPU,
@@ -47,10 +46,6 @@ impl Emulator {
     pub fn setup_emulator(self: &mut Self, game_path: &str) {
         let sdl_context = sdl2::init().expect("Couldnt create sdl context"); // SDL for graphics, sound and input
 
-        println!("SDL Context created");
-
-        println!("{:?}", sdl_context.video());
-
         let video_subsystem = sdl_context // Init Display
             .video()
             .expect("Couldnt initialize video subsystem");
@@ -69,7 +64,6 @@ impl Emulator {
     }
 
     pub fn run(self: &mut Self) {
-        // Put these in graphics somehow
         let video_subsystem = match &self.video_subsystem {
             Some(videosys) => videosys,
             None => panic!("No video subsystem was initialized"),
@@ -89,21 +83,20 @@ impl Emulator {
 
         let creator = canvas.texture_creator();
         let mut texture = creator
-            .create_texture_streaming(PixelFormatEnum::ARGB8888, NUM_PIXELS_X, NUM_PIXELS_Y)
+            .create_texture(PixelFormatEnum::RGB24, TextureAccess::Streaming, NUM_PIXELS_X, NUM_PIXELS_Y)
             .map_err(|e| e.to_string())
             .unwrap();
 
         let rect = Some(Rect::new(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT));
 
-        let x1 = std::time::Instant::now();
         let mut counter: u128 = 0;
 
         loop {
             unsafe {
                 PRINT_DEBUG.increment_index();
-                if PRINT_DEBUG.index >= 1000 {
-                    PRINT_DEBUG.save_data();
-                }
+                // if PRINT_DEBUG.index >= 1000 {
+                //     PRINT_DEBUG.save_data();
+                // }
             }
 
             if self.cpu.update_input() {
@@ -118,15 +111,27 @@ impl Emulator {
             } else {
                 // Halted
                 // self.cpu.curr_cycles = 4;
-                // self.cpu.adv_cycles(4); // Should this be 1 or 4?
+                self.cpu.adv_cycles(4); // Should this be 1 or 4?
             }
 
-            // if self.cpu.update_display(&mut texture) {
-            //     canvas.copy(&texture, None, rect).unwrap();
-            //     canvas.present();
-            // }
+            if self.cpu.update_display(&mut texture) {
+                canvas.copy(&texture, None, rect).unwrap();
+                canvas.present();
+            }
 
             counter = counter.wrapping_add(1);
         }
     }
+}
+
+pub fn convert_index4msb_to_rgb24(index: u8) -> [u8; 3] {
+    let mut rgb: [u8; 3] = [0; 3];
+    match index {
+        0x00 => rgb = [0, 0, 0],
+        0x05 => rgb = [96, 96, 96],
+        0x0A => rgb = [192, 192, 192],
+        0x0F => rgb = [255, 255, 255],
+        _ => panic!("Invalid index: {}", index)
+    }
+    return rgb;
 }
