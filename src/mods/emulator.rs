@@ -83,7 +83,7 @@ impl Emulator {
 
         let creator = canvas.texture_creator();
         let mut texture = creator
-            .create_texture(PixelFormatEnum::RGB24, TextureAccess::Streaming, NUM_PIXELS_X, NUM_PIXELS_Y)
+            .create_texture(PixelFormatEnum::RGBA32, TextureAccess::Streaming, NUM_PIXELS_X, NUM_PIXELS_Y)
             .map_err(|e| e.to_string())
             .unwrap();
 
@@ -124,13 +124,14 @@ impl Emulator {
     }
 }
 
-pub fn convert_index4msb_to_rgb24(index: u8) -> [u8; 3] {
-    let mut rgb: [u8; 3] = [0; 3];
+pub fn convert_index4msb_to_rgba32(index: u8) -> [u8; 4] {
+    let mut rgb: [u8; 4] = [0; 4];
     match index {
-        0x00 => rgb = [0, 0, 0],
-        0x05 => rgb = [96, 96, 96],
-        0x0A => rgb = [192, 192, 192],
-        0x0F => rgb = [255, 255, 255],
+        0x00 => rgb = [0, 0, 0, 255],
+        0x05 => rgb = [96, 96, 96, 255],
+        0x0A => rgb = [192, 192, 192, 255],
+        0x0F => rgb = [255, 255, 255, 255],
+        0xFF => rgb = [0, 0, 0, 0],
         _ => panic!("Invalid index: {}", index)
     }
     return rgb;

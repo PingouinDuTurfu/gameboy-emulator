@@ -170,7 +170,7 @@ impl Graphics {
     // https://www.reddit.com/r/Gameboy/comments/a1c8h0/what_happens_when_a_gameboy_screen_is_disabled/
     pub fn disable_ppu(self: &mut Self) {
         self.state = physics_processing_unit::disable(&mut self.gpu_data);
-        self.gpu_data.rgb24_pixels.iter_mut().for_each(|pix| *pix = 0);
+        self.gpu_data.rgba32_pixels.iter_mut().for_each(|pix| *pix = 0);
         self.gpu_data.window_line_counter = 0;
         self.gpu_data.stat_low_to_high = false; // Just in case
 
@@ -225,7 +225,7 @@ impl Graphics {
             // }
 
             texture
-                .update(None, &self.gpu_data.rgb24_pixels, NUM_PIXELS_X as usize * RBG24_BYTES_PER_PIXEL)
+                .update(None, &self.gpu_data.rgba32_pixels, NUM_PIXELS_X as usize * RBG24_BYTES_PER_PIXEL)
                 .expect("updating texture didnt work");
 
             self.cycles = 0;

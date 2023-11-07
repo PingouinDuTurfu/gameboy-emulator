@@ -47,7 +47,7 @@ impl Keypad {
         }
         let byte = match address {
             KEYPAD_REGISTER => self.data,
-            _ => panic!("Joypad cannot read from addr: {:04X}", address),
+            _ => panic!("Keypad cannot read from addr: {:04X}", address),
         };
         return byte;
     }
@@ -55,20 +55,17 @@ impl Keypad {
     pub fn write_byte(self: &mut Self, address: u16, data: u8) {
         match address {
             KEYPAD_REGISTER => {
-                unsafe {
-                    PRINT_DEBUG.add_data(format!("Keypad write: {:02X}\n", data));
-                }
+                // unsafe {
+                //     PRINT_DEBUG.add_data(format!("Keypad write: {:02X}\n", data));
+                // }
                 self.data = (data & 0x30) | (self.data & 0xCF);
                 self.something_selected = (self.data & 0x20 == 0x20) ^ (self.data & 0x10 == 0x10);
             }
-            _ => panic!("Joypad cannot write addr: {:04X}", address),
+            _ => panic!("Keypad cannot write addr: {:04X}", address),
         };
     }
 
     pub fn is_keypad_interrupt(self: &Self) -> bool {
-        if self.something_selected && self.button_change {
-            println!("Joypad interrupt");
-        }
         return self.something_selected && self.button_change;
     }
 
@@ -84,8 +81,7 @@ impl Keypad {
 
             if let Some(e) = event {
                 match e {
-                    Event::Quit { .. } | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => unsafe {
-                        // PRINT_DEBUG.save_data();
+                    Event::Quit { .. } | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                         should_exit = true;
                     }
                     Event::KeyDown { keycode: Some(x), .. } => {
@@ -104,10 +100,6 @@ impl Keypad {
         }
         if self.data & 0x20 == 0x00 {
             self.data = (self.data & 0xF0) | self.row_command;
-        }
-
-        if should_exit  {
-            println!("Exiting");
         }
 
         return should_exit;
@@ -129,7 +121,6 @@ impl Keypad {
     }
 
     pub fn keyup(&mut self, key: Keycode) {
-        println!("Keyup: {:?}", key);
         self.button_change = true;
         match key {
             Keycode::D => self.row_direction |= 1 << 0,
@@ -144,14 +135,3 @@ impl Keypad {
         }
     }
 }
-
-/*
-    Bit 7 - Not used
-    Bit 6 - Not used
-    Bit 5 - P15 Select Action buttons    (0=Select)
-    Bit 4 - P14 Select Direction buttons (0=Select)
-    Bit 3 - P13 Input: Down  or Start    (0=Pressed) (Read Only)
-    Bit 2 - P12 Input: Up    or Select   (0=Pressed) (Read Only)
-    Bit 1 - P11 Input: Left  or B        (0=Pressed) (Read Only)
-    Bit 0 - P10 Input: Right or A        (0=Pressed) (Read Only)
-*/

@@ -9,6 +9,7 @@ use crate::mods::mbc_default::MbcDefault;
 use crate::mods::memory::Memory;
 use crate::mods::serial::{SB_REG, SC_REG, Serial};
 use crate::mods::gpu_memory::{OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMORY_START, PHYSICS_PROCESSING_UNIT_IO_END, PHYSICS_PROCESSING_UNIT_IO_START, UNUSED_END, UNUSED_START, VIDEO_RAM_END, VIDEO_RAM_START};
+use crate::mods::timer::{Timer, TIMER_END, TIMER_START};
 
 pub enum BusType {
     Video,    //0x8000-0x9FFF
@@ -32,7 +33,8 @@ pub struct Bus {
     pub graphics: Graphics,
     pub keypad: Keypad,
     pub serial: Serial,
-    pub oam_dma: OamDma
+    pub oam_dma: OamDma,
+    pub timer: Timer
 }
 
 impl Bus {
@@ -45,6 +47,7 @@ impl Bus {
             keypad: Keypad::new(),
             serial: Serial::new(),
             oam_dma: OamDma::new(),
+            timer: Timer::new()
         }
     }
 
@@ -55,6 +58,7 @@ impl Bus {
         self.keypad.init();
         self.serial.init();
         self.oam_dma.init();
+        self.timer.init();
     }
 
     pub fn set_mbc(self: &mut Self, cart_mbc: MbcDefault) {
@@ -71,8 +75,10 @@ impl Bus {
             PHYSICS_PROCESSING_UNIT_IO_START..=PHYSICS_PROCESSING_UNIT_IO_END => self.graphics.read_io_byte(address),
             0xFF10..=0xFF2F => 0x0000,
             SB_REG | SC_REG => self.serial.read_byte(address),
+            TIMER_START..=TIMER_END => self.timer.read_byte(address),
             0xFF03..=0xFF0F => self.input_output.read_byte(address),
             0xFF4C..=0xFF7F => self.input_output.read_byte(address),
+            0xFF30..=0xFF3F => 0x0000,
             _ => self.memory.read_byte(address),
         }
     }
@@ -90,9 +96,11 @@ impl Bus {
             UNUSED_START..=UNUSED_END => self.graphics.write_byte(address, value),
             PHYSICS_PROCESSING_UNIT_IO_START..=PHYSICS_PROCESSING_UNIT_IO_END => self.graphics.write_io_byte(address, value),
             0xFF10..=0xFF2F => (),
+            TIMER_START..=TIMER_END => self.timer.write_byte(address, value),
             SB_REG | SC_REG => self.serial.write_byte(address, value),
             0xFF03..=0xFF0F => self.input_output.write_byte(address, value),
             0xFF4C..=0xFF7F => self.input_output.write_byte(address, value),
+            0xFF30..=0xFF3F => (),
             _ => self.memory.write_byte(address, value),
         }
     }
@@ -105,7 +113,6 @@ impl Bus {
     pub fn update_input(self: &mut Self) -> bool {
         let should_exit = self.keypad.update_input();
         if self.keypad.is_keypad_interrupt() {
-            println!("Keypad interrupt");
             self.input_output.request_keypad_interrupt();
         }
         return should_exit;
@@ -121,7 +128,7 @@ impl Bus {
     }
 
     pub fn adv_cycles(self: &mut Self, cycles: usize) {
-        // self.timer.adv_cycles(&mut self.io, cycles);
+        self.timer.adv_cycles(&mut self.input_output, cycles);
         // self.serial.adv_cycles(&mut self.input_output, cycles);
         self.graphics.adv_cycles(&mut self.input_output, cycles);
         // self.memory.adv_cycles(cycles);
@@ -152,7 +159,7 @@ impl Bus {
             UNUSED_START..=UNUSED_END => self.graphics.read_byte_for_dma(addr),
             KEYPAD_REGISTER => self.keypad.read_byte(addr),
             SB_REG | SC_REG => self.serial.read_byte(addr),
-            // TIMER_START..=TIMER_END => self.timer.read_byte(addr),
+            TIMER_START..=TIMER_END => self.timer.read_byte(addr),
             // SOUND_START..=SOUND_END => self.sound.read_byte(addr),
             // PCM12 | PCM34 => self.sound.read_byte(addr),
             // WAVE_RAM_START..=WAVE_RAM_END => self.sound.read_byte(addr),

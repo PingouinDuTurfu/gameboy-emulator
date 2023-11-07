@@ -33,7 +33,7 @@
         4. Sleep (2 Cycles)
         5. Push (1 Cycle each time until complete)
 */
-use crate::mods::emulator::{convert_index4msb_to_rgb24, NUM_PIXELS_X, PRINT_DEBUG};
+use crate::mods::emulator::{convert_index4msb_to_rgba32, NUM_PIXELS_X, PRINT_DEBUG};
 use crate::mods::gpu_memory::{GpuMemory, OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMORY_START, RBG24_BYTES_PER_PIXEL, UNUSED_END, UNUSED_START, VIDEO_RAM_END, VIDEO_RAM_START};
 use crate::mods::object_attribute_memory_search::ObjectAttributMemorySearch;
 use crate::mods::physics_processing_unit::{MODE_HORIZONTAL_BLANK, PhysicsProcessingUnitState};
@@ -343,14 +343,10 @@ impl PictureGeneration {
 
             let bg_color = if self.bgw_enable { bit_col } else { 0 };
             let mut color = gpu_mem.background_colors_as_sdl_pixel_format_index4msb[bg_color];
-            // unsafe {
-            //     if bg_color != 0 {
-            //         PRINT_DEBUG.add_data(format!("BG_COLOR : {:1X} ; BIT_COL : {:1X} ; P1 {:4X} ; P0 {:4X} ; BGW_LO {:4X} ; BGW_HI {:4X}\n", bg_color, bit_col, p1, p0, self.bgw_lo, self.bgw_hi));
-            //     }
-            // }
-            // if !self.spr_indicies.is_empty() {
-            //     color = self.fetch_and_merge(gpu_mem, bg_color)
-            // }
+
+            if !self.spr_indicies.is_empty() {
+                color = self.fetch_and_merge(gpu_mem, bg_color)
+            }
 
             gpu_mem.background_pixel_fifo.push_back(color);
             self.scanline_pos += 1;
@@ -374,33 +370,23 @@ impl PictureGeneration {
             if spr.flip_x {
                 offset = 7 - offset;
             }
+
+            let p1 = (self.spr_data_hi[list_idx] >> (7 - offset)) & 0x01;
+            let p0 = (self.spr_data_lo[list_idx] >> (7 - offset)) & 0x01;
+            let bit_col = (p1 << 1 | p0) as usize;
+
+            if (!spr.priority || bg_col == 0) && (bit_col != 0) {
+
+                return if spr.dot_matrix_game_palette {
+                    gpu_mem.object_colors_1_as_sdl_pixel_format_index4msb[bit_col]
+                } else {
+                    gpu_mem.object_colors_2_as_sdl_pixel_format_index4msb[bit_col]
+                };
+            }
         }
 
-        return 0x0F // All candidate sprite pixels were transparent or out of bounds
+        return gpu_mem.background_colors_as_sdl_pixel_format_index4msb[bg_col];
     }
-
-    // Not one of the states with mode 3 but a necessary step in mode 3 I think
-    // Probably do the merging with sprite fifo here
-    // fn pop_fifo(self: &mut Self, gpu_mem: &mut GpuMemory) {
-    //     if gpu_mem.bg_pixel_fifo.len() > PictureGeneration::FIFO_MIN_PIXELS {
-    //         let pixel = gpu_mem.bg_pixel_fifo.pop_front();
-    //
-    //         if let Some(val) = pixel {
-    //             // Discard scx % 8 pixels at beginning of scanline (calculated at start of scanline)
-    //             // If window is displaying, then we don't want to discard any pixels
-    //             if ((self.scx_lo) <= self.discard_pixels) | self.window_y_trigger {
-    //                 for i in 0..=3 {
-    //                     gpu_mem.pixels[(usize::from(gpu_mem.ly) * BYTES_PER_ROW)
-    //                         + (usize::from(self.push_x) * BYTES_PER_PIXEL)
-    //                         + i] = val[i];
-    //                 }
-    //                 self.push_x += 1;
-    //             } else {
-    //                 self.discard_pixels += 1;
-    //             }
-    //         }
-    //     }
-    // }
 
     fn pop_fifo(self: &mut Self, gpu_mem: &mut GpuMemory) {
         if gpu_mem.background_pixel_fifo.len() > PictureGeneration::FIFO_MIN_PIXELS {
@@ -412,9 +398,9 @@ impl PictureGeneration {
             if let Some(val) = pixel {
                 if ((self.scx_lo) <= self.discard_pixels) | self.window_y_trigger {
                     let index = usize::from(gpu_mem.ly) * NUM_PIXELS_X as usize * RBG24_BYTES_PER_PIXEL + usize::from(self.push_x) * RBG24_BYTES_PER_PIXEL;
-                    let rgb24 = convert_index4msb_to_rgb24(val);
+                    let rgba32 = convert_index4msb_to_rgba32(val);
                     for i in 0..=2 {
-                        gpu_mem.rgb24_pixels[index + i] = rgb24[i];
+                        gpu_mem.rgba32_pixels[index + i] = rgba32[i];
                     }
                     self.push_x += 1;
                 } else {

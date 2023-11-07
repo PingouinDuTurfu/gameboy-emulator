@@ -1,4 +1,3 @@
-use crate::mods::emulator::PRINT_DEBUG;
 use crate::mods::gpu_memory::{GpuMemory, OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMORY_START, UNUSED_END, UNUSED_START, VIDEO_RAM_END, VIDEO_RAM_START};
 use crate::mods::physics_processing_unit::{MODE_PICTURE_GENERATION, PhysicsProcessingUnitState};
 use crate::mods::picture_generation::PictureGeneration;
@@ -44,6 +43,7 @@ impl ObjectAttributMemorySearch {
     }
 
     pub fn read_byte(self: &Self, gpu_mem: &GpuMemory, addr: u16) -> u8 {
+        println!("OAM Search Read Byte");
         return match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => gpu_mem.video_ram[usize::from(addr - VIDEO_RAM_START)],
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => 0xFF,
@@ -113,6 +113,7 @@ impl ObjectAttributMemorySearch {
             }
 
             if ((gpu_mem.ly + 16) >= ypos) && ((gpu_mem.ly + 16) < ypos + sprite_height) {
+
                 let mut idx = 0;
                 for sprite in gpu_mem.sprite_list.iter() {
                     // https://gbdev.io/pandocs/OAM.html#drawing-priority

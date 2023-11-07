@@ -299,9 +299,9 @@ impl CPU {
                 let r8 = self.read_pc();
 
                 unsafe {
-                    if PRINT_DEBUG.global_index == 98771 {
-                        PRINT_DEBUG.add_data(format!("Eval cond: {}, r8: {:#04X}\n", should_jump, r8));
-                    }
+                    // if PRINT_DEBUG.global_index == 98771 {
+                    //     PRINT_DEBUG.add_data(format!("Eval cond: {}, r8: {:#04X}\n", should_jump, r8));
+                    // }
                 }
                 if should_jump {
                     self.internal_cycle();
@@ -368,6 +368,9 @@ impl CPU {
             0x35 => {
                 let value =  self.read_address(self.registers.get_hl()).wrapping_sub(1);
                 self.write_byte(self.registers.get_hl(), value);
+                self.registers.f.zero = value == 0;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = (self.registers.l & 0xF) < 0x1;
             }
             0x36 => {
                 let value = self.read_pc();
@@ -2188,6 +2191,11 @@ impl CPU {
             self.internal_cycle();
             self.pc = (most_significant_byte << 8) | least_significant_byte;
         }
+        unsafe {
+            if PRINT_DEBUG.global_index == 3859177 {
+                PRINT_DEBUG.add_data(format!("Eval cond: {}, r16: {:#04X} -> {}\n", should_jump, (most_significant_byte << 8) | least_significant_byte, self.pc));
+            }
+        }
     }
 
     fn jump_relative(&mut self, should_jump: bool) {
@@ -2197,9 +2205,9 @@ impl CPU {
             self.pc = self.pc.wrapping_add_signed(offset);
         }
         unsafe {
-            if PRINT_DEBUG.global_index == 98829 {
-                PRINT_DEBUG.add_data(format!("Eval cond: {}, r8: {:#04X} -> {}\n", should_jump, offset, self.pc));
-            }
+            // if PRINT_DEBUG.global_index == 98829 {
+            //     PRINT_DEBUG.add_data(format!("Eval cond: {}, r8: {:#04X} -> {}\n", should_jump, offset, self.pc));
+            // }
         }
     }
 

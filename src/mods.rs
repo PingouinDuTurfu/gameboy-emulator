@@ -19,3 +19,4 @@ mod vertical_blank;
 mod horizontal_blank;
 mod object_attribute_memory_search;
 mod picture_generation;
+mod timer;

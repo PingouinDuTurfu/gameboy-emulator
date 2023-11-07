@@ -22,10 +22,10 @@ pub const PHYSICS_PROCESSING_UNIT_IO_END: u16 = 0xFF4B;
 pub const UNUSED_START: u16 = 0xFEA0;
 pub const UNUSED_END: u16 = 0xFEFF;
 pub const COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB: [u8; 4] = [0x0F, 0x0A, 0x05, 0x00];
-pub const RBG24_BYTES_PER_PIXEL: usize = 3;
+pub const RBG24_BYTES_PER_PIXEL: usize = 4;
 
 pub struct GpuMemory {
-    pub rgb24_pixels: [u8; TOTAL_PIXELS as usize * RBG24_BYTES_PER_PIXEL],
+    pub rgba32_pixels: [u8; TOTAL_PIXELS as usize * RBG24_BYTES_PER_PIXEL],
     pub video_ram: [u8; (VIDEO_RAM_END - VIDEO_RAM_START) as usize + 1], // 0x8000 - 0x9FFF
     pub object_attribute_memory: [u8; (OBJECT_ATTRIBUTE_MEMORY_END - OBJECT_ATTRIBUTE_MEMORY_START) as usize + 1], // OAM 0xFE00 - 0xFE9F  40 sprites, each takes 4 bytes
     pub lcd_control: u8, // 0xFF40
@@ -50,13 +50,15 @@ pub struct GpuMemory {
     pub sprite_list: Vec<Sprite>,
     pub background_pixel_fifo: VecDeque<u8>,
 
-    pub background_colors_as_sdl_pixel_format_index4msb: [u8; 4]
+    pub background_colors_as_sdl_pixel_format_index4msb: [u8; 4],
+    pub object_colors_1_as_sdl_pixel_format_index4msb: [u8; 4],
+    pub object_colors_2_as_sdl_pixel_format_index4msb: [u8; 4]
 }
 
 impl GpuMemory {
     pub fn new() -> GpuMemory {
         return GpuMemory {
-            rgb24_pixels: [0; TOTAL_PIXELS as usize * RBG24_BYTES_PER_PIXEL],
+            rgba32_pixels: [0; TOTAL_PIXELS as usize * RBG24_BYTES_PER_PIXEL],
             video_ram: [0; (VIDEO_RAM_END - VIDEO_RAM_START) as usize + 1],
             object_attribute_memory: [0; (OBJECT_ATTRIBUTE_MEMORY_END - OBJECT_ATTRIBUTE_MEMORY_START) as usize + 1],
             lcd_control: 0,
@@ -81,7 +83,9 @@ impl GpuMemory {
             sprite_list: Vec::<Sprite>::new(),
             background_pixel_fifo: VecDeque::new(),
 
-            background_colors_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB
+            background_colors_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB.clone(),
+            object_colors_1_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB.clone(),
+            object_colors_2_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB.clone(),
         };
     }
 
@@ -97,6 +101,10 @@ impl GpuMemory {
         self.object_palette_1 = 0x00;
         self.window_y = 0x00;
         self.window_x = 0x00;
+
+        // replace white with transparent in object palettes
+        self.object_colors_1_as_sdl_pixel_format_index4msb[0] = 0xFF;
+        self.object_colors_2_as_sdl_pixel_format_index4msb[0] = 0xFF;
     }
 
     pub fn read_physics_processing_unit_io(self: &Self, addr: u16) -> u8 {
