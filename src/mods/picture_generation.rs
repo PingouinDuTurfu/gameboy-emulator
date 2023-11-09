@@ -1,47 +1,10 @@
-/*
-    We got two fifos (background and sprites)
-    The two fifos are only mixed when popping items
-    Sprites take priority unless transparent (color 0)
-    fifos are only manipulated during mode 3
-    the pixel fetcher makes sure each fifo has at least 8 pixels
-
-    pixels have three properties for dmg (cgb has a fourth)
-        color between 0 and 3
-        palette between 0 and 7 only for sprites
-        background priority: value of the OBJ-to-BG Priority bit
-
-    https://gbdev.io/pandocs/pixel_fifo.html#get-tile <--- Continue from here
-*/
-
-/*
-    Any time I access gpu_mem.oam need to do a check to make sure that a
-    dma_transfer is not in progress as it would have control of the bus.
-
-    Vram can be accessed normally within this state. Though cpu cant access it.
-    (Cause we are working with it)
-
-    Once again dont use picture_generation.read_byte or picture_generation.write_byte
-    since those are for the cpu and are rejecting everything due to being in this state
-*/
-/*
-    Pixel Fetcher
-    fetches a row of 8 background or window pixels and queues them
-    to be mixed with sprite pixels. There are 5 steps
-        1. Get Tile (2 Cycles)
-        2. Get Tile Data Low (2 Cycles)
-        3. Get Tile Data High (2 Cycles)
-        4. Sleep (2 Cycles)
-        5. Push (1 Cycle each time until complete)
-*/
-use crate::mods::emulator::{convert_index4msb_to_rgba32, NUM_PIXELS_X, PRINT_DEBUG};
+use crate::mods::emulator::{BYTES_PER_TILE_SIGNED, convert_index4msb_to_rgba32, NUM_PIXELS_X};
 use crate::mods::gpu_memory::{GpuMemory, OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMORY_START, RBG24_BYTES_PER_PIXEL, UNUSED_END, UNUSED_START, VIDEO_RAM_END, VIDEO_RAM_START};
 use crate::mods::object_attribute_memory_search::ObjectAttributMemorySearch;
 use crate::mods::physics_processing_unit::{MODE_HORIZONTAL_BLANK, PhysicsProcessingUnitState};
-use crate::mods::to_remvoe::graphics::{BYTES_PER_TILE_SIGNED};
-use super::horizontal_blank::HorizontalBlank;
-// On each dot during mode 3, either the PPU outputs a pixel or the fetcher is stalling the FIFOs
 
-// mode 3
+use super::horizontal_blank::HorizontalBlank;
+
 pub struct PictureGeneration {
     cycles_counter: usize,
     fifo_state: FifoState,
@@ -70,13 +33,11 @@ pub enum FifoState {
     GetTileDataLow,
     GetTileDataHigh,
     Sleep,
-    Push,
-    None,
+    Push
 }
 
 impl PictureGeneration {
     const SCANLINE_CYCLES: usize = 456;
-    const FIFO_MAX_PIXELS: usize = 16;
     const FIFO_MIN_PIXELS: usize = 8;
 
     pub fn new() -> PictureGeneration {
@@ -104,7 +65,6 @@ impl PictureGeneration {
         };
     }
 
-    // picturegeneration may return itself or hblank
     fn next(self: Self, gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {
         if (self.push_x) < NUM_PIXELS_X as u8 {
             return PhysicsProcessingUnitState::PictureGeneration(self);
@@ -118,7 +78,6 @@ impl PictureGeneration {
 
     pub fn render(mut self, gpu_mem: &mut GpuMemory, cycles: usize) -> PhysicsProcessingUnitState {
         if self.cycles_counter == 0 {
-            // first time on this scanline
             self.scx_lo = gpu_mem.scroll_x % 8;
             self.window_y_trigger = gpu_mem.is_window_enabled() && gpu_mem.is_window_visible();
         }
@@ -141,28 +100,21 @@ impl PictureGeneration {
                 FifoState::GetTileDataLow => self.get_tile_data_low(gpu_mem),
                 FifoState::GetTileDataHigh => self.get_tile_data_high(gpu_mem),
                 FifoState::Sleep => self.sleep(gpu_mem),
-                FifoState::Push => self.push(gpu_mem),
-                FifoState::None => panic!("Fifo should not be in None State"),
+                FifoState::Push => self.push(gpu_mem)
             };
         } else {
-            // Attempt every dot if in the state
             if let FifoState::Push = self.fifo_state {
-                // Might do nothing so then we just stay in push which is fine
                 self.fifo_state = self.push(gpu_mem);
             }
         }
-
-        // Always attempted
         self.pop_fifo(gpu_mem);
     }
 
-    // lcdc, scx, and scy should only be sampled each time a tile is fetched
-    // Lower 3 bits of scx can only change at start of each scanline
+
     pub fn get_tile_num(self: &mut Self, gpu_mem: &mut GpuMemory) -> FifoState {
         let curr_tile;
         let map_start;
 
-        // Basically storing the lcdc state at tile fetch for the remainder of the fifo
         self.bgw_enable = gpu_mem.is_bgw_enabled();
         self.big_spr = gpu_mem.is_big_sprite();
         self.scx_fifo = gpu_mem.scroll_x();
@@ -171,7 +123,6 @@ impl PictureGeneration {
 
         self.spr_indicies.clear();
 
-        // curr_tile will be between 0 and 1023(0x3FF) inclusive
         if self.bgw_enable {
             curr_tile = ((self.fetch_x + (self.scx_fifo / 8)) & 0x1F)
                 + (32 * (((gpu_mem.ly() + self.scy_fifo) & 0xFF) / 8));
@@ -193,9 +144,6 @@ impl PictureGeneration {
         return FifoState::GetTileDataLow;
     }
 
-    // refer to https://gbdev.io/pandocs/Scrolling.html#window
-    // at some point in this frame the value of WY was equal to LY (checked at the start of Mode 2 only)
-    // Maybe move the `gpu_mem.ly() >= gpu_mem.wy()` to the beginning of mode 2
     fn find_window_tile_num(self: &mut Self, gpu_mem: &mut GpuMemory) {
         let fetcher_pos = (self.fetch_x * 8) + 7;
         if fetcher_pos >= gpu_mem.window_x() {
@@ -206,15 +154,7 @@ impl PictureGeneration {
             self.byte_index = gpu_mem.video_ram[index - usize::from(VIDEO_RAM_START)];
         }
     }
-    /*
-        Sprite X = position on screen + 8. I can either
-        subtract 8 from sprx or add 8 to the comparisons
 
-        The || with xpos + 8 is then because its possible that there are two sprites
-        almost on top of each other but with maybe the last pixel of the second sprite
-        not covered by anything. Its x position would not match up with the xpos of the
-        fetcher since we would have passed it so this makes sure we can still catch it
-    */
     fn search_spr_list(self: &mut Self, gpu_mem: &mut GpuMemory) {
         for (i, sprite) in gpu_mem.sprite_list.iter().enumerate() {
             if sprite.x_pos < 168 && sprite.x_pos > 0 {
@@ -266,12 +206,6 @@ impl PictureGeneration {
             self.get_spr_tile_data(gpu_mem, 1);
         }
 
-        // unsafe {
-        //     PRINT_DEBUG.add_data(format!("MAP_ADDR: {:4X} ; OFFSET: {:4X}\n", self.map_addr, offset));
-        //     if PRINT_DEBUG.global_index == 99095 {
-        //         PRINT_DEBUG.add_vram_table_data(gpu_mem.video_ram.clone());
-        //     }
-        // }
         self.bgw_hi = gpu_mem.video_ram[usize::from(self.map_addr + offset - VIDEO_RAM_START)];
         return FifoState::Sleep;
     }
@@ -283,35 +217,18 @@ impl PictureGeneration {
 
         for i in &self.spr_indicies {
             let spr = &gpu_mem.sprite_list[*i];
-
-            // The +16 to ly is because ypos = sprite y position on screen + 16
-            // This is the difference between what line the sprite started to appear
-            // and what line is currently being rendered. Or in other words what line
-            // of the sprite is being rendered
             let mut y_offset = (ly + 16) - (spr.y_pos as i32);
-
-            /*
-                Flip so we need to take the bytes in the reverse order. The current line
-                of the sprite subtracted from the sprite height gets us the lines to
-                rendered in reverse order. (When rendering the first line of sprite: 0,
-                height - 0 will equal the height so that means we display the last line
-                of the sprite.) The -1 is because the offset are 0 indexed but the height
-                is 8 or 16.
-            */
             if spr.flip_y {
                 y_offset = (spr_height - 1) - y_offset;
             }
 
             tile_index = if spr_height == 16 {
-                // https://gbdev.io/pandocs/OAM.html#byte-2---tile-index
                 spr.tile_index & 0xFE
             } else {
                 spr.tile_index
             };
 
             let index = ((tile_index as i32) * 16) + (y_offset * 2);
-
-            // The index is already relative from 0x8000 so no need to subtract 0x8000
             if offset == 0 {
                 self.spr_data_lo.push(gpu_mem.video_ram[index as usize]);
             } else {
@@ -326,7 +243,6 @@ impl PictureGeneration {
 
     pub fn push(self: &mut Self, gpu_mem: &mut GpuMemory) -> FifoState {
         if gpu_mem.background_pixel_fifo.len() > 8 {
-            // FIFO full
             return FifoState::Push;
         }
         self.get_color_and_push(gpu_mem);
@@ -334,7 +250,6 @@ impl PictureGeneration {
         return FifoState::GetTile;
     }
 
-    // weaves the bits together to form the correct output for graphics
     fn get_color_and_push(self: &mut Self, gpu_mem: &mut GpuMemory) {
         for shift in 0..=7 {
             let p1 = (self.bgw_hi >> (7 - shift)) & 0x01;
@@ -362,8 +277,6 @@ impl PictureGeneration {
 
             let mut offset = self.scanline_pos as i32 - spr_scr_xpos;
             if offset < 0 || offset > 7 {
-                // Current pixel is either past the sprite end: >7
-                // or behind the sprite starting x position: <0
                 continue;
             }
 
@@ -391,10 +304,6 @@ impl PictureGeneration {
     fn pop_fifo(self: &mut Self, gpu_mem: &mut GpuMemory) {
         if gpu_mem.background_pixel_fifo.len() > PictureGeneration::FIFO_MIN_PIXELS {
             let pixel: Option<u8> = gpu_mem.background_pixel_fifo.pop_front();
-            // unsafe {
-            //     PRINT_DEBUG.add_data(format!("PIXEL: {:1X}\n", pixel.unwrap()));
-            // }
-
             if let Some(val) = pixel {
                 if ((self.scx_lo) <= self.discard_pixels) | self.window_y_trigger {
                     let index = usize::from(gpu_mem.ly) * NUM_PIXELS_X as usize * RBG24_BYTES_PER_PIXEL + usize::from(self.push_x) * RBG24_BYTES_PER_PIXEL;

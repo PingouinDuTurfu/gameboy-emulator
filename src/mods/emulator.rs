@@ -1,10 +1,6 @@
-use std::fs::File;
-use std::io::BufWriter;
-
 use sdl2::{Sdl, VideoSubsystem};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
-use once_cell::unsync::Lazy;
 use sdl2::render::TextureAccess;
 
 use crate::mods::cartridge::Cartridge;
@@ -17,19 +13,20 @@ pub const NUM_PIXELS_Y: u32 = 144;
 pub const TOTAL_PIXELS: u32 = NUM_PIXELS_X * NUM_PIXELS_Y;
 pub const SCREEN_WIDTH: u32 = NUM_PIXELS_X * SCALE;
 pub const SCREEN_HEIGHT: u32 = NUM_PIXELS_Y * SCALE;
+pub const BYTES_PER_TILE_SIGNED: isize = 16;
+
 pub static mut PRINT_DEBUG: PrintDebug = PrintDebug {debug: false,
         data: String::new(),
         global_index: 0,
         index: 0,
-        already_printed_vram: false
+        already_printed_video_ram: false
 };
 
 pub struct Emulator {
     cpu: CPU,
     cart: Cartridge,
     sdl_context: Option<Sdl>,
-    video_subsystem: Option<VideoSubsystem>,
-    file_writer: Option<BufWriter<File>>,
+    video_subsystem: Option<VideoSubsystem>
 }
 
 impl Emulator {
@@ -38,8 +35,7 @@ impl Emulator {
             cpu: CPU::new(),
             cart: Cartridge::new(),
             sdl_context: None,
-            video_subsystem: None,
-            file_writer: None,
+            video_subsystem: None
         };
     }
 
@@ -89,50 +85,37 @@ impl Emulator {
 
         let rect = Some(Rect::new(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT));
 
-        let mut counter: u128 = 0;
-
         loop {
             unsafe {
                 PRINT_DEBUG.increment_index();
-                // if PRINT_DEBUG.index >= 1000 {
-                //     PRINT_DEBUG.save_data();
-                // }
             }
 
             if self.cpu.update_input() {
-                // Is true when we get the exit signal
                 break;
             }
             self.cpu.check_interrupts();
 
-            if !self.cpu.halted {
-                // self.cpu.curr_cycles = 0;
+            if !self.cpu.halted() {
                 self.cpu.step(true);
             } else {
-                // Halted
-                // self.cpu.curr_cycles = 4;
-                self.cpu.adv_cycles(4); // Should this be 1 or 4?
+                self.cpu.adv_cycles(4);
             }
 
             if self.cpu.update_display(&mut texture) {
                 canvas.copy(&texture, None, rect).unwrap();
                 canvas.present();
             }
-
-            counter = counter.wrapping_add(1);
         }
     }
 }
 
 pub fn convert_index4msb_to_rgba32(index: u8) -> [u8; 4] {
-    let mut rgb: [u8; 4] = [0; 4];
-    match index {
-        0x00 => rgb = [0, 0, 0, 255],
-        0x05 => rgb = [96, 96, 96, 255],
-        0x0A => rgb = [192, 192, 192, 255],
-        0x0F => rgb = [255, 255, 255, 255],
-        0xFF => rgb = [0, 0, 0, 0],
+    return match index {
+        0x00 => [0, 0, 0, 255],
+        0x05 => [96, 96, 96, 255],
+        0x0A => [192, 192, 192, 255],
+        0x0F => [255, 255, 255, 255],
+        0xFF => [0, 0, 0, 0],
         _ => panic!("Invalid index: {}", index)
     }
-    return rgb;
 }

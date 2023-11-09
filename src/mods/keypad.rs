@@ -1,28 +1,16 @@
 use sdl2::event::Event;
 use sdl2::EventPump;
 use sdl2::keyboard::Keycode;
-use crate::mods::emulator::PRINT_DEBUG;
 
 pub const KEYPAD_REGISTER: u16 = 0xFF00;
 
 pub struct Keypad {
-    event_pump: Option<EventPump>, // Gestionnaire d'évènements
+    event_pump: Option<EventPump>, // Event manager
     row_direction: u8,
     row_command: u8,
     data: u8,
     button_change: bool,
     something_selected: bool,
-}
-
-pub enum KeypadKey {
-    Right,
-    Left,
-    Up,
-    Down,
-    A,
-    B,
-    Select,
-    Start,
 }
 
 impl Keypad {
@@ -55,9 +43,6 @@ impl Keypad {
     pub fn write_byte(self: &mut Self, address: u16, data: u8) {
         match address {
             KEYPAD_REGISTER => {
-                // unsafe {
-                //     PRINT_DEBUG.add_data(format!("Keypad write: {:02X}\n", data));
-                // }
                 self.data = (data & 0x30) | (self.data & 0xCF);
                 self.something_selected = (self.data & 0x20 == 0x20) ^ (self.data & 0x10 == 0x10);
             }

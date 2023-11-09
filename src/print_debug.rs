@@ -3,7 +3,7 @@ pub struct PrintDebug {
     pub data: String,
     pub global_index: u64,
     pub index: u64,
-    pub already_printed_vram: bool,
+    pub already_printed_video_ram: bool,
 }
 
 impl PrintDebug {
@@ -12,11 +12,11 @@ impl PrintDebug {
         self.data.push_str(&data);
     }
 
-    pub fn add_vram_table_data(self: &mut Self, data: [u8; (0x9FFF - 0x8000) as usize + 1]) {
-        if self.already_printed_vram {
+    pub fn add_video_ram_table_data(self: &mut Self, data: [u8; (0x9FFF - 0x8000) as usize + 1]) {
+        if self.already_printed_video_ram {
             return;
         }
-        self.already_printed_vram = true;
+        self.already_printed_video_ram = true;
         for i in 0..data.len() {
             self.data.push_str(&format!("{:02X} ", data[i]));
             if i % 16 == 15 {

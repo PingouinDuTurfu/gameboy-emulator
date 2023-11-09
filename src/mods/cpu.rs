@@ -1,37 +1,25 @@
-use std::fmt::{Display, format, Formatter, Result};
-use sdl2::libc::printf;
 use sdl2::render::Texture;
 
 use crate::mods::bus::Bus;
 use crate::mods::emulator::PRINT_DEBUG;
-use crate::mods::flag_register::FlagsRegister;
 use crate::mods::mbc_default::MbcDefault;
 use crate::mods::register::Registers;
 
 pub struct CPU {
-    pub registers: Registers,
-    pub bus: Bus,
-    pub pc: u16,
-    pub sp: u16,
-    pub halted: bool,
-    pub ime: bool,
-    pub ime_scheduled: bool,
+    registers: Registers,
+    bus: Bus,
+    pc: u16,
+    sp: u16,
+    ime: bool,
+    ime_scheduled: bool,
+    halted: bool
 }
 
 impl CPU {
 
     pub fn new() -> CPU {
         CPU {
-            registers: Registers {
-                a: 0,
-                b: 0,
-                c: 0,
-                d: 0,
-                e: 0,
-                f: FlagsRegister::new(),
-                h: 0,
-                l: 0,
-            },
+            registers: Registers::new(),
             pc: 0x0100,
             sp: 0xFFFE,
             bus: Bus::new(),
@@ -295,19 +283,7 @@ impl CPU {
                 self.registers.a = a;
             }
             0x28 => {
-                let should_jump = self.registers.f.zero;
-                let r8 = self.read_pc();
-
-                unsafe {
-                    // if PRINT_DEBUG.global_index == 98771 {
-                    //     PRINT_DEBUG.add_data(format!("Eval cond: {}, r8: {:#04X}\n", should_jump, r8));
-                    // }
-                }
-                if should_jump {
-                    self.internal_cycle();
-                    let offset = r8 as i8;
-                    self.pc = self.pc.wrapping_add(offset as u16);
-                }
+                self.jump_relative(self.registers.f.zero);
             }
             0x29 => {
                 let value = self.registers.get_hl();
@@ -1011,9 +987,6 @@ impl CPU {
             }
             0xe0 => {
                 let address = self.read_pc();
-                // unsafe {
-                //     PRINT_DEBUG.add_data(format!("Writing to {:04X} {:02X}\n", address, self.registers.a));
-                // }
                 self.write_byte(0xFF00 | address as u16, self.registers.a);
             }
             0xe1 => {
@@ -1030,9 +1003,6 @@ impl CPU {
             0xe6 => {
                 let value = self.read_pc();
                 self.and(value);
-                // unsafe {
-                //     PRINT_DEBUG.add_data(format!("AND {:02X}\n", self.registers.a));
-                // }
             }
             0xe7 => {
                 self.internal_cycle();
@@ -1066,10 +1036,6 @@ impl CPU {
             0xf0 => {
                 let address = self.read_pc();
                 self.registers.a = self.read_address(0xFF00 | address as u16);
-                // self.registers.a = 0x94;
-                // unsafe {
-                //     PRINT_DEBUG.add_data(format!("Reading from {:04X} {:04X} val: {:04X}\n", address, 0xFF00 | address as u16, self.registers.a));
-                // }
             }
             0xf1 => {
                 let value = self.pop();
@@ -1079,7 +1045,6 @@ impl CPU {
                 self.registers.a = self.read_address(0xFF00 | self.registers.c as u16);
             }
             0xf3 => {
-                // Disable interrupts => IME = 0 and cancel any pending EI
                 self.ime = false;
             }
             0xf5 => {
@@ -1113,7 +1078,6 @@ impl CPU {
                 self.registers.a = self.read_address(address);
             }
             0xfb => {
-                // Schedule interrupt enable
                 self.ime_scheduled = true;
             }
             0xfe => {
@@ -1988,11 +1952,6 @@ impl CPU {
             0xff => {
                 self.registers.a = self.set(7, self.registers.a);
             }
-            _ => unsafe {
-                PRINT_DEBUG.save_last_lines();
-                println!("Unknown prefixed instruction: {:x}\n", byte);
-                panic!("OOOOO putain c'est la merde")
-            }
         }
     }
 
@@ -2006,7 +1965,6 @@ impl CPU {
     }
 
     fn handle_interrupt(&mut self) {
-        // println!("Handling interrupt");
         let i_enable = self.read_address(0xFFFF);
         let mut if_register_trigger = self.read_address(0xFF0F);
         self.ime = false;
@@ -2029,16 +1987,10 @@ impl CPU {
         self.bus.adv_cycles(cycles);
     }
 
-    // ??????????????????????????????????????
-    // ??????????????????????????????????????
-    // ??????????????????????????????????????
     pub fn internal_cycle(self: &mut Self) {
         self.adv_cycles(4);
         // self.curr_cycles += 4;
     }
-    // ??????????????????????????????????????
-    // ??????????????????????????????????????
-    // ??????????????????????????????????????
 
     fn read_address(self: &mut Self, address: u16) -> u8 {
         let byte = self.bus.read_byte(address);
@@ -2204,11 +2156,6 @@ impl CPU {
             self.internal_cycle();
             self.pc = self.pc.wrapping_add_signed(offset);
         }
-        unsafe {
-            // if PRINT_DEBUG.global_index == 98829 {
-            //     PRINT_DEBUG.add_data(format!("Eval cond: {}, r8: {:#04X} -> {}\n", should_jump, offset, self.pc));
-            // }
-        }
     }
 
     fn call(&mut self, should_jump: bool) {
@@ -2216,9 +2163,6 @@ impl CPU {
         if should_jump {
             self.internal_cycle();
             self.push(self.pc);
-            // unsafe {
-            //     PRINT_DEBUG.add_data(format!("Calling {:04X}\n", val));
-            // }
             self.pc = val;
         }
     }
@@ -2344,6 +2288,14 @@ impl CPU {
         }
     }
 
+    pub fn update_display(self: &mut Self, texture: &mut Texture) -> bool {
+        return self.bus.update_display(texture);
+    }
+
+    pub fn halted(self: &mut Self) -> bool {
+        return self.halted;
+    }
+
     fn print_debug_prefixed(byte: u8) -> String {
         match byte {
             0x00 => "Prefix: RLC B".to_string(), 0x01 => "Prefix: RLC C".to_string(), 0x02 => "Prefix: RLC D".to_string(), 0x03 => "Prefix: RLC E".to_string(), 0x04 => "Prefix: RLC H".to_string(), 0x05 => "Prefix: RLC L".to_string(), 0x06 => "Prefix: RLC (HL)".to_string(), 0x07 => "Prefix: RLC A".to_string(), 0x08 => "Prefix: RRC B".to_string(), 0x09 => "Prefix: RRC C".to_string(), 0x0a => "Prefix: RRC D".to_string(), 0x0b => "Prefix: RRC E".to_string(), 0x0c => "Prefix: RRC H".to_string(), 0x10 => "Prefix: RL B".to_string(), 0x11 => "Prefix: RL C".to_string(), 0x12 => "Prefix: RL D".to_string(),
@@ -2363,26 +2315,5 @@ impl CPU {
             0xe0 => "Prefix: SET 4, B".to_string(), 0xe1 => "Prefix: SET 4, C".to_string(), 0xe2 => "Prefix: SET 4, D".to_string(), 0xe3 => "Prefix: SET 4, E".to_string(), 0xe4 => "Prefix: SET 4, H".to_string(), 0xe5 => "Prefix: SET 4, L".to_string(), 0xe6 => "Prefix: SET 4, (HL)".to_string(), 0xe7 => "Prefix: SET 4, A".to_string(), 0xe8 => "Prefix: SET 5, B".to_string(), 0xe9 => "Prefix: SET 5, C".to_string(), 0xea => "Prefix: SET 5, D".to_string(), 0xeb => "Prefix: SET 5, E".to_string(), 0xec => "Prefix: SET 5, H".to_string(), 0xed => "Prefix: SET 5, L".to_string(), 0xee => "Prefix: SET 5, (HL)".to_string(), 0xef => "Prefix: SET 5, A".to_string(),
             0xf0 => "Prefix: SET 6, B".to_string(), 0xf1 => "Prefix: SET 6, C".to_string(), 0xf2 => "Prefix: SET 6, D".to_string(), 0xf3 => "Prefix: SET 6, E".to_string(), 0xf4 => "Prefix: SET 6, H".to_string(), 0xf5 => "Prefix: SET 6, L".to_string(), 0xf6 => "Prefix: SET 6, (HL)".to_string(), 0xf7 => "Prefix: SET 6, A".to_string(), 0xf8 => "Prefix: SET 7, B".to_string(), 0xf9 => "Prefix: SET 7, C".to_string(), 0xfa => "Prefix: SET 7, D".to_string(), 0xfb => "Prefix: SET 7, E".to_string(), 0xfc => "Prefix: SET 7, H".to_string(), 0xfd => "Prefix: SET 7, L".to_string(), 0xfe => "Prefix: SET 7, (HL)".to_string(), 0xff => "Prefix: SET 7, A".to_string(),
         }
-    }
-
-    pub fn update_display(self: &mut Self, texture: &mut Texture) -> bool {
-        return self.bus.update_display(texture);
-    }
-}
-
-impl Display for CPU {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "CPU: A: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} F: {:02X} H: {:02X} L: {:02X} SP: {:04X} PC: {:04X}",
-                self.registers.a,
-                self.registers.b,
-                self.registers.c,
-                self.registers.d,
-                self.registers.e,
-                u8::from(self.registers.f.clone()),
-                self.registers.h,
-                self.registers.l,
-                self.sp,
-                self.pc
-        )
     }
 }

@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
-use crate::mods::emulator::{PRINT_DEBUG, TOTAL_PIXELS};
+
+use crate::mods::emulator::TOTAL_PIXELS;
 use crate::mods::sprite::Sprite;
 
 pub const VIDEO_RAM_START: u16 = 0x8000;
@@ -28,9 +29,9 @@ pub struct GpuMemory {
     pub rgba32_pixels: [u8; TOTAL_PIXELS as usize * RBG24_BYTES_PER_PIXEL],
     pub video_ram: [u8; (VIDEO_RAM_END - VIDEO_RAM_START) as usize + 1], // 0x8000 - 0x9FFF
     pub object_attribute_memory: [u8; (OBJECT_ATTRIBUTE_MEMORY_END - OBJECT_ATTRIBUTE_MEMORY_START) as usize + 1], // OAM 0xFE00 - 0xFE9F  40 sprites, each takes 4 bytes
-    pub lcd_control: u8, // 0xFF40
-    pub stat: u8, // 0xFF41
-    pub scroll_y: u8, // 0xFF42 scrolling background y
+    lcd_control: u8, // 0xFF40
+    stat: u8, // 0xFF41
+    scroll_y: u8, // 0xFF42 scrolling background y
     pub scroll_x: u8, // 0xFF43 scrolling background x
     pub ly: u8, // 0xFF44 current y scanline
     pub lyc: u8, // 0xFF45 y scanline compare
@@ -150,15 +151,10 @@ impl GpuMemory {
     }
 
     pub fn set_ly(self: &mut Self, val: u8) {
-        // unsafe {
-        //     PRINT_DEBUG.add_data(format!("SET LY: {:02X}\n", val));
-        // }
         self.ly = val;
         self.update_stat_ly(self.ly_compare());
     }
 
-    // Check should also occur when LCD is shut down and enabled again
-    // When the above occurs should also call update_stat_ly
     pub fn ly_compare(self: &Self) -> bool {
         return self.lyc == self.ly;
     }
@@ -172,18 +168,16 @@ impl GpuMemory {
         self.check_interrupt_sources();
     }
 
-    // Dont call this except on state transitions
     pub fn set_stat_mode(self: &mut Self, mode: u8) {
         if mode == 0x01 && self.ly == 0x90 {
             self.vertical_blank_int = true;
         } else {
             self.vertical_blank_int = false;
         }
-        self.stat = (self.stat & 0xFC) | mode; // Set the mode flag
+        self.stat = (self.stat & 0xFC) | mode;
         self.check_interrupt_sources();
     }
 
-    // Only request interrupts on low to high
     pub fn check_interrupt_sources(self: &mut Self) {
         let mut new_stat_int = false;
 
@@ -228,42 +222,30 @@ impl GpuMemory {
         return self.stat & 0x03;
     }
 
-    // Im guessing the reason to assign a color to each index
-    // and not have them be static is to allow for stuff like
-    // inverting colors or making everything the same color
-    // to make something like a silohoette appear.
     fn set_background_palette(self: &mut Self, data: u8) {
         self.background_palette = data;
     }
 
-    fn set_object_palette_0_palette(self: &mut Self, mut data: u8) {
+    fn set_object_palette_0_palette(self: &mut Self, data: u8) {
         self.object_palette_0 = data;
-        data = data & 0x0FC; // For sprites color index 0 should be transparent
     }
 
-    fn set_object_palette_1_palette(self: &mut Self, mut data: u8) {
+    fn set_object_palette_1_palette(self: &mut Self, data: u8) {
         self.object_palette_1 = data;
-        data = data & 0x0FC; // For sprites color index 0 should be transparent
     }
 
-    // When bit 0 is cleared, the background and window become white (disabled) and
-    // and the window display bit is ignored.
     pub fn is_bgw_enabled(self: &Self) -> bool {
         return (self.lcd_control & 0x01) == 0x01;
     }
 
-    // Are sprites enabled or not (bit 1 of lcdc)
     pub fn is_spr_enabled(self: &Self) -> bool {
         return (self.lcd_control & 0x02) == 0x02;
     }
 
-    // Are sprites a single tile or 2 stacked vertically (bit 2 of lcdc)
     pub fn is_big_sprite(self: &Self) -> bool {
         return (self.lcd_control & 0x04) == 0x04;
     }
 
-    // Bit 3 controls what area to look for the bg tile map area
-    // Returns the start and end address of video ram containing the 32x32 tile map
     pub fn get_background_tile_map(self: &Self) -> (u16, u16) {
         return match (self.lcd_control & 0x08) == 0x08 {
             false => (0x9800, 0x9BFF),
@@ -271,9 +253,6 @@ impl GpuMemory {
         };
     }
 
-    // Bit4 of lcd control gives Background and Window Tile data area
-    // 1 will mean indexing from 0x8000, and 0 will mean addressing from 0x8800
-    // However 8800 addressing actually means indexing from 0x9000
     pub fn get_addr_mode_start(self: &Self) -> u16 {
         return match (self.lcd_control & 0x10) == 0x10 {
             true => 0x8000,
@@ -281,14 +260,10 @@ impl GpuMemory {
         };
     }
 
-    // Bit 5 controls whether the window is displayed or not.
-    // Can be overriden by bit 0 hence the call to is_bgw_enabled
     pub fn is_window_enabled(self: &Self) -> bool {
         return (self.lcd_control & 0x20) == 0x20;
     }
 
-    // Bit 6 controls what area to look for the window tile map area
-    // Returns the start and end address of vram containing the 32x32 tile map
     pub fn get_window_tile_map(self: &Self) -> (u16, u16) {
         return match (self.lcd_control & 0x40) == 0x40 {
             false => (0x9800, 0x9BFF),
@@ -296,7 +271,6 @@ impl GpuMemory {
         };
     }
 
-    // LCD and PPU enabled when bit 7 of lcdc register is 1
     pub fn is_physics_processing_unit_enabled(self: &Self) -> bool {
         return (self.lcd_control & 0x80) == 0x80;
     }
@@ -308,7 +282,6 @@ impl GpuMemory {
             && (self.window_y <= 0x8F);
     }
 
-    /* Just to make some things cleaner elsewhere */
     pub fn ly(self: &Self) -> usize {
         return self.ly as usize;
     }
@@ -323,9 +296,5 @@ impl GpuMemory {
 
     pub fn window_x(self: &Self) -> usize {
         return self.window_x as usize;
-    }
-
-    pub fn window_y(self: &Self) -> usize {
-        return self.window_y as usize;
     }
 }

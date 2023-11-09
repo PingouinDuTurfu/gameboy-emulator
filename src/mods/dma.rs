@@ -1,9 +1,8 @@
 use core::panic;
 
 use crate::mods::bus::BusType;
-use crate::mods::gpu_memory::{OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMORY_START, VIDEO_RAM_END, VIDEO_RAM_START};
-use crate::mods::to_remvoe::graphics::Graphics;
-
+use crate::mods::gpu_memory::{VIDEO_RAM_END, VIDEO_RAM_START};
+use crate::mods::graphics::Graphics;
 
 pub const DMA_REG: u16 = 0xFF46;
 pub const DMA_SRC_MUL: u16 = 0x0100;
@@ -15,7 +14,7 @@ pub struct OamDma {
     cycles: u16,
     delay_cycles: usize,
     in_transfer: bool,
-    pub bus_conflict: BusType,
+    bus_conflict: BusType,
 }
 
 impl OamDma {
@@ -28,6 +27,10 @@ impl OamDma {
             in_transfer: false,
             bus_conflict: BusType::None,
         }
+    }
+
+    pub fn init(self: &mut Self) {
+        self.dma = 0xFF;
     }
 
     pub fn read_dma(self: &Self, addr: u16) -> u8 {
@@ -51,21 +54,6 @@ impl OamDma {
 
         self.start_dma_countdown();
     }
-
-    // #[cfg(feature = "debug")]
-    // pub fn get_debug_info(self: &Self) -> String {
-    //     format!(
-    //         "dma_active: {}, dma_val: {:04X}, cycles: {}, delay: {}\n",
-    //         self.in_transfer, self.dma, self.cycles, self.delay_cycles
-    //     )
-    // }
-
-    // Call this method when there is a bus conflict during dma transfer
-    // Return this value when there is a bus conflict
-    pub fn get_value(self: &Self) -> u8 {
-        return self.value;
-    }
-
     pub fn set_value(self: &mut Self, value: u8) {
         self.value = value;
     }
@@ -81,13 +69,6 @@ impl OamDma {
     pub fn calc_addr(self: &mut Self) -> u16 {
         return (self.dma as u16 * DMA_SRC_MUL) + self.cycles;
     }
-
-    // Supposed to be but not really enforced 0x0000 - 0xDF00
-    pub fn get_src(self: &Self) -> u16 {
-        return (self.dma as u16) * DMA_SRC_MUL;
-    }
-
-    // Range of cycles should be: 0x00 - 0x9F
     pub fn cycles(self: &Self) -> u16 {
         return self.cycles;
     }
@@ -125,34 +106,7 @@ impl OamDma {
         self.bus_conflict = match self.calc_addr() {
             VIDEO_RAM_START..=VIDEO_RAM_END => BusType::Video,
             0x0000..=0x7FFF | 0xA000..=0xFDFF => BusType::External,
-            _ => panic!(
-                "addr should be between 0x0000 and 0xFDFF: dma: {}",
-                self.dma
-            ),
-        };
-    }
-
-    pub fn init(self: &mut Self) {
-        self.dma = 0xFF;    // Starting register value
-    }
-
-    pub fn has_conflict(self: &Self) -> bool {
-        return self.bus_conflict.is_some();
-    }
-
-    // If a bus is in use for DMA transfers, then we can not use it to read any data
-    // The data read should instead be the current dma value being transferred from that memory bus
-    // Reads from sprite ram return 0xFF during dma transfer
-    pub fn check_bus_conflicts(self: &Self, addr: u16) -> Option<u8> {
-        return if self.has_conflict() && self.in_transfer {
-            match (addr, &self.bus_conflict) {
-                (VIDEO_RAM_START..=VIDEO_RAM_END, BusType::Video) => Some(self.value),
-                (0x0000..=0x7FFF | 0xA000..=0xFDFF, BusType::External) => Some(self.value),
-                (OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END, _conflict) => Some(0xFF),
-                _ => None,
-            }
-        } else {
-            None
+            _ => panic!("addr should be between 0x0000 and 0xFDFF: dma: {}", self.dma),
         };
     }
 }

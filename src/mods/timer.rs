@@ -1,14 +1,11 @@
-// Most information regarding the timer will be based on this (Section 5)
-// https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf
-
 use crate::mods::input_output::InputOutput;
 
 pub const TIMER_START: u16 = 0xFF04;
 pub const TIMER_END: u16 = 0xFF07;
-pub const DIV_REG: u16 = 0xFF04;
-pub const TIMA_REG: u16 = 0xFF05;
-pub const TMA_REG: u16 = 0xFF06;
-pub const TAC_REG: u16 = 0xFF07;
+pub const DIV_REG: u16 = 0xFF04; // Divider Register for time tracking.
+pub const TIMA_REG: u16 = 0xFF05; // Timer Counter Register for counter management.
+pub const TMA_REG: u16 = 0xFF06; // Timer Modulo Register for managing overflow values.
+pub const TAC_REG: u16 = 0xFF07; // Timer Control Register for configuring timer operation.
 
 pub struct Timer {
     div: u16,
@@ -25,23 +22,10 @@ enum TimaOverflowState {
 }
 
 impl TimaOverflowState {
-    pub fn is_none(self: &Self) -> bool {
-        match self {
-            TimaOverflowState::None => true,
-            _ => false,
-        }
-    }
 
     pub fn is_done(self: &Self) -> bool {
         match self {
             TimaOverflowState::Done => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_advcing(self: &Self) -> bool {
-        match self {
-            TimaOverflowState::Advancing => true,
             _ => false,
         }
     }
@@ -81,16 +65,10 @@ impl Timer {
             TIMA_REG => {
                 self.tima = match self.overflow_source {
                     TimaOverflowState::Advancing => {
-                        // We wont reload the tima if we wrote on the
-                        // same cycle it is to be reloaded
                         self.overflow_source = TimaOverflowState::None;
                         data
                     }
-                    TimaOverflowState::Done => {
-                        // If we write to the tima on the cycle it was reloaded
-                        // it should stay as the reloaded value
-                        self.tima // self.tma should also be fine
-                    }
+                    TimaOverflowState::Done => self.tima,
                     TimaOverflowState::None => data,
                 }
             }
@@ -100,9 +78,7 @@ impl Timer {
                     self.tima = self.tma;
                 }
             }
-            TAC_REG => {
-                self.write_tac(data);
-            }
+            TAC_REG => { self.write_tac(data); }
             _ => panic!("Timer does not handle writes to addr: {}", addr),
         }
     }
@@ -125,7 +101,6 @@ impl Timer {
 
         let new_div_bit = self.div_tac_multiplexer();
 
-        // Falling edge detector
         let should_incr =
             self.detected_falling_edge(old_div_bit, new_div_bit, timer_enable, timer_enable);
 
@@ -166,15 +141,13 @@ impl Timer {
         }
     }
 
-    // Increments the timer and returns if it overflowed
     fn incr_timer(self: &mut Self) -> bool {
         let (new_tima, overflow) = self.tima.overflowing_add(1);
 
         self.tima = new_tima;
 
         if overflow {
-            // Should be 0 anyways due to overflow so this is kinda useless
-            self.tima = 0x00; // Delay reload for 1 M-cycle
+            self.tima = 0x00;
             self.overflow_source = TimaOverflowState::Advancing;
         }
 
@@ -203,7 +176,6 @@ impl Timer {
         };
     }
 
-    // Return true on a 1 to 0 transition
     fn detected_falling_edge(
         self: &Self,
         old_div: bool,

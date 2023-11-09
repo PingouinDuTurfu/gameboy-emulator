@@ -1,22 +1,13 @@
 use std::time::Instant;
 
 use sdl2::render::Texture;
-use crate::mods::emulator::PRINT_DEBUG;
-use crate::mods::input_output::InputOutput;
+use crate::mods::emulator::NUM_PIXELS_X;
+
 use crate::mods::gpu_memory::{GpuMemory, LCD_CONTROL_REG, OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMORY_START, RBG24_BYTES_PER_PIXEL, STAT_REG, VIDEO_RAM_END, VIDEO_RAM_START};
+use crate::mods::input_output::InputOutput;
 use crate::mods::physics_processing_unit;
 use crate::mods::physics_processing_unit::PhysicsProcessingUnitState;
 use crate::mods::physics_processing_unit::PhysicsProcessingUnitState::{HorizontalBlank, ObjectAttributeMemory, PictureGeneration, VerticalBlank};
-
-
-pub const SCALE: u32 = 3;
-pub const NUM_PIXELS_X: u32 = 160;
-pub const NUM_PIXELS_Y: u32 = 144;
-pub const TOTAL_PIXELS: usize = (NUM_PIXELS_X * NUM_PIXELS_Y) as usize;
-pub const SCREEN_WIDTH: u32 = (NUM_PIXELS_X as u32 * SCALE) as u32; // Only used by the window and rect (not in the texture)
-pub const SCREEN_HEIGHT: u32 = (NUM_PIXELS_Y as u32 * SCALE) as u32; // Only used by the window and rect (not in the texture)
-pub const BYTES_PER_TILE_SIGNED: isize = 16;
-
 
 pub struct Graphics {
     state: PhysicsProcessingUnitState,
@@ -38,7 +29,10 @@ impl Graphics {
         }
     }
 
-    // When ppu is not enabled we should be in hblank so these read/writes should always work
+    pub fn init(self: &mut Self) {
+        self.gpu_data.init();
+    }
+
     pub fn read_byte(self: &Self, addr: u16) -> u8 {
         return match &self.state {
             ObjectAttributeMemory(os) => os.read_byte(&self.gpu_data, addr),
@@ -58,8 +52,6 @@ impl Graphics {
             _ => panic!("Physic Processing Unit not cover this state {:04X}", addr),
         }
     }
-
-    // I dont think anything stops dma from reading memory ranges above 0xDF9F so...
     pub fn read_byte_for_dma(self: &Self, addr: u16) -> u8 {
         return match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => self.gpu_data.video_ram[usize::from(addr - VIDEO_RAM_START)],
@@ -68,8 +60,6 @@ impl Graphics {
             _ => panic!("DMA shouldnt not read from address: {:04X}", addr),
         };
     }
-
-    // addr should be from 0 - 159 inclusive
     pub fn write_byte_for_dma(self: &mut Self, addr: u16, data: u8) {
         self.gpu_data.object_attribute_memory[usize::from(addr)] = data;
     }
@@ -93,7 +83,6 @@ impl Graphics {
                 }
             }
             STAT_REG => {
-                // For 1 cycle write 0xFF and whatever resulting interrupts
                 if self.stat_quirk(data) {
                     self.gpu_data.write_physics_processing_unit_io(addr, 0xFF);
                 }
@@ -109,51 +98,25 @@ impl Graphics {
 
         self.cycles += cycles;
         let state = std::mem::replace(&mut self.state, PhysicsProcessingUnitState::None);
+        self.state = match state {
+            ObjectAttributeMemory(os) => os.render(&mut self.gpu_data, cycles),
+            PictureGeneration(pg) => pg.render(&mut self.gpu_data, cycles),
+            HorizontalBlank(hb) => hb.render(&mut self.gpu_data, cycles),
+            VerticalBlank(vb) => vb.render(&mut self.gpu_data, cycles),
+            _ => panic!("Physic Processing Unit not cover this state"),
+        };
 
-        unsafe {
-            self.state = match state {
-                ObjectAttributeMemory(os) => {
-                    // PRINT_DEBUG.add_data(format!("OamSearch: {} {} {}\n", self.gpu_data.ly, self.gpu_data.lyc, cycles));
-                    os.render(&mut self.gpu_data, cycles)
-                },
-                PictureGeneration(pg) => {
-                    // PRINT_DEBUG.add_data(format!("PictureGeneration: {} {} {}\n", self.gpu_data.ly, self.gpu_data.lyc, cycles));
-                    pg.render(&mut self.gpu_data, cycles)
-                },
-                HorizontalBlank(hb) => {
-                    // PRINT_DEBUG.add_data(format!("HBlank: {} {} {}\n", self.gpu_data.ly, self.gpu_data.lyc, cycles));
-                    hb.render(&mut self.gpu_data, cycles)
-                },
-                VerticalBlank(vb) => {
-                    // PRINT_DEBUG.add_data(format!("VBlank: {} {} {}\n", self.gpu_data.ly, self.gpu_data.lyc, cycles));
-                    vb.render(&mut self.gpu_data, cycles)
-                },
-                _ => panic!("Physic Processing Unit not cover this state"),
-            };
-        }
-
-
-
-        // Need to do it this way since no direct access to ifired from gpu_memory.rs
         if self.gpu_data.stat_low_to_high {
             io.request_stat_interrupt();
             self.gpu_data.stat_low_to_high = false;
         }
 
-        // Its okay to check after every cycle since vblank_int is only set on the transition
-        // to mode 1 and never afterwards. Thus its not possible that we accidently trigger two
-        // vblank interrupts for a single vblank period as set_stat_mode(1) is never called again
         if self.gpu_data.vertical_blank_int {
-            io.request_vblank_interrupt();
+            io.request_vertical_blank_interrupt();
             self.gpu_data.vertical_blank_int = false;
             self.frame_ready = true;
         }
 
-        // If we have some value in the option, then we had tried to write to stat
-        // We should have set the delay to true when setting the option. (stat_quirk function)
-        // If the delay is there, this is the adv_cycles call right after writing to STAT_REG
-        // so set the delay to false so that on the next adv cycles we can write the val saved
-        // within the option to the stat register.
         if let Some(val) = self.gpu_data.dot_matrix_game_stat_quirk {
             if !self.gpu_data.dot_matrix_game_stat_quirk_delay {
                 self.gpu_data.write_physics_processing_unit_io(STAT_REG, val);
@@ -163,29 +126,20 @@ impl Graphics {
             }
         }
     }
-    pub fn init(self: &mut Self) {
-        self.gpu_data.init();
-    }
 
-    // https://www.reddit.com/r/Gameboy/comments/a1c8h0/what_happens_when_a_gameboy_screen_is_disabled/
     pub fn disable_ppu(self: &mut Self) {
         self.state = physics_processing_unit::disable(&mut self.gpu_data);
         self.gpu_data.rgba32_pixels.iter_mut().for_each(|pix| *pix = 0);
         self.gpu_data.window_line_counter = 0;
-        self.gpu_data.stat_low_to_high = false; // Just in case
-
-        // ppu is disabled so comparison shouldnt occur and current compare status should not be changed
-        // https://github.com/Gekkio/mooneye-test-suite/blob/main/acceptance/ppu/stat_lyc_onoff.s#L74
+        self.gpu_data.stat_low_to_high = false;
         self.gpu_data.ly = 0;
     }
 
     pub fn enable_ppu(self: &mut Self) {
-        // https://github.com/Gekkio/mooneye-test-suite/blob/main/acceptance/ppu/lcdon_timing-GS.s#L24
-        // Not doing the 2 cycle delay yet
         self.state = physics_processing_unit::enable(&mut self.gpu_data);
         self.gpu_data.set_ly(0);
         self.gpu_data.sprite_list.clear();
-        self.gpu_data.stat_low_to_high = false; // Just in case
+        self.gpu_data.stat_low_to_high = false;
     }
 
     pub fn stat_quirk(self: &mut Self, data: u8) -> bool {
@@ -203,27 +157,12 @@ impl Graphics {
         }
     }
 
-    // Just so that the states know if one is going on
     pub fn set_dma_transfer(self: &mut Self, status: bool) {
         self.gpu_data.direct_memory_access_transfer = status;
     }
 
-    // Write multiple bytes into memory starting from location
-    // This should only be used for tests (How to configure to only compile for tests)
-    pub fn write_bytes(self: &mut Self, location: u16, data: &Vec<u8>) {
-        for (i, byte) in data.into_iter().enumerate() {
-            self.write_byte(location + (i as u16), *byte);
-        }
-    }
-
     pub fn update_display(self: &mut Self, texture: &mut Texture) -> bool {
         if self.frame_ready {
-            // let wait_time = (self.cycles as f64) * CPU_PERIOD_NANOS;
-            // let elapsed = self.prev_frame_time.elapsed().as_nanos() as f64;
-            // if elapsed < wait_time {
-            //     std::thread::sleep(Duration::from_nanos((wait_time - elapsed) as u64));
-            // }
-
             texture
                 .update(None, &self.gpu_data.rgba32_pixels, NUM_PIXELS_X as usize * RBG24_BYTES_PER_PIXEL)
                 .expect("updating texture didnt work");
