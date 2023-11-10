@@ -423,9 +423,7 @@ impl Cpu {
             0x48 => {
                 self.registers.c = self.registers.b;
             }
-            0x49 => {
-                self.registers.c = self.registers.c;
-            }
+            0x49 => {}
             0x4a => {
                 self.registers.c = self.registers.d;
             }
@@ -448,9 +446,7 @@ impl Cpu {
             0x51 => {
                 self.registers.d = self.registers.c;
             }
-            0x52 => {
-                self.registers.d = self.registers.d;
-            }
+            0x52 => {}
             0x53 => {
                 self.registers.d = self.registers.e;
             }
@@ -500,9 +496,7 @@ impl Cpu {
             0x63 => {
                 self.registers.h = self.registers.e;
             }
-            0x64 => {
-                self.registers.h = self.registers.h;
-            }
+            0x64 => {}
             0x65 => {
                 self.registers.h = self.registers.l;
             }
@@ -579,9 +573,7 @@ impl Cpu {
             0x7e => {
                 self.registers.a = self.read_address(self.registers.get_hl());
             }
-            0x7f => {
-                self.registers.a = self.registers.a;
-            }
+            0x7f => {}
             0x80 => {
                 let value = self.registers.b;
                 let value = self.add(value);
@@ -1988,7 +1980,7 @@ impl Cpu {
         let byte = self.bus.read_byte(address);
         self.adv_cycles(4);
         // self.curr_cycles += 4;
-        return byte;
+        byte
     }
 
     fn read_next_word(&mut self) -> u16 {
@@ -2026,10 +2018,10 @@ impl Cpu {
     }
 
     pub fn update_input(&mut self) -> bool {
-        return self.bus.update_input();
+        self.bus.update_input()
     }
 
-    pub(crate) fn push(&mut self, value: u16) {
+    pub fn push(&mut self, value: u16) {
         self.sp = self.sp.wrapping_sub(1);
         self.write_byte(self.sp, ((value & 0xFF00) >> 8) as u8);
 
@@ -2037,7 +2029,7 @@ impl Cpu {
         self.write_byte(self.sp, (value & 0xFF) as u8);
     }
 
-    pub(crate) fn pop(&mut self) -> u16 {
+    pub fn pop(&mut self) -> u16 {
         let lsb = self.read_address(self.sp) as u16;
         self.sp = self.sp.wrapping_add(1);
 
@@ -2281,11 +2273,11 @@ impl Cpu {
     }
 
     pub fn update_display(&mut self, texture: &mut Texture) -> bool {
-        return self.bus.update_display(texture);
+        self.bus.update_display(texture)
     }
 
     pub fn halted(&mut self) -> bool {
-        return self.halted;
+        self.halted
     }
 
     fn print_debug_prefixed(byte: u8) -> String {

@@ -58,7 +58,7 @@ pub struct GpuMemory {
 
 impl GpuMemory {
     pub fn new() -> GpuMemory {
-        return GpuMemory {
+        GpuMemory {
             rgba32_pixels: [0; TOTAL_PIXELS as usize * RBG24_BYTES_PER_PIXEL],
             video_ram: [0; (VIDEO_RAM_END - VIDEO_RAM_START) as usize + 1],
             object_attribute_memory: [0; (OBJECT_ATTRIBUTE_MEMORY_END - OBJECT_ATTRIBUTE_MEMORY_START) as usize + 1],
@@ -84,10 +84,10 @@ impl GpuMemory {
             sprite_list: Vec::<Sprite>::new(),
             background_pixel_fifo: VecDeque::new(),
 
-            background_colors_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB.clone(),
-            object_colors_1_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB.clone(),
-            object_colors_2_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB.clone(),
-        };
+            background_colors_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB,
+            object_colors_1_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB,
+            object_colors_2_as_sdl_pixel_format_index4msb: COLORS_AS_SDL_PIXEL_FORMAT_INDEX4MSB
+        }
     }
 
     pub fn init(&mut self) {
@@ -109,7 +109,7 @@ impl GpuMemory {
     }
 
     pub fn read_physics_processing_unit_io(&self, addr: u16) -> u8 {
-        return match addr {
+        match addr {
             LCD_CONTROL_REG => self.lcd_control,
             STAT_REG => self.stat,
             SCROLL_Y_REG => self.scroll_y,
@@ -122,7 +122,7 @@ impl GpuMemory {
             WINDOW_Y_REG => self.window_y,
             WINDOW_X_REG => self.window_x,
             _ => panic!("Physics processing unit IO does not handle reads from: {:04X}", addr),
-        };
+        }
     }
 
     pub fn write_physics_processing_unit_io(&mut self, addr: u16, data: u8) {
@@ -134,7 +134,7 @@ impl GpuMemory {
             }
             SCROLL_Y_REG => self.scroll_y = data,
             SCROLL_X_REG => self.scroll_x = data,
-            LY_REG => return, // read only
+            LY_REG => (), // read only
             LYC_REG => {
                 self.lyc = data;
                 if self.is_physics_processing_unit_enabled() {
@@ -156,24 +156,20 @@ impl GpuMemory {
     }
 
     pub fn ly_compare(&self) -> bool {
-        return self.lyc == self.ly;
+        self.lyc == self.ly
     }
 
     pub fn update_stat_ly(&mut self, equal: bool) {
         if equal {
-            self.stat = self.stat | 0x04;
+            self.stat |= 0x04;
         } else {
-            self.stat = self.stat & 0xFB;
+            self.stat &= 0xFB;
         }
         self.check_interrupt_sources();
     }
 
     pub fn set_stat_mode(&mut self, mode: u8) {
-        if mode == 0x01 && self.ly == 0x90 {
-            self.vertical_blank_int = true;
-        } else {
-            self.vertical_blank_int = false;
-        }
+        self.vertical_blank_int = mode == 0x01 && self.ly == 0x90;
         self.stat = (self.stat & 0xFC) | mode;
         self.check_interrupt_sources();
     }
@@ -197,29 +193,29 @@ impl GpuMemory {
     pub fn lyc_int_match(&mut self) -> bool {
         let source = (self.stat & 0x40) == 0x40;
         let flag = (self.stat & 0x04) == 0x04;
-        return source && flag;
+        source && flag
     }
 
     pub fn object_attribute_memory_int_match(&mut self) -> bool {
         let source = (self.stat & 0x20) == 0x20;
         let flag = (self.stat & 0x03) == 0x02;
-        return source && flag;
+        source && flag
     }
 
     pub fn horizontal_blank_int_match(&mut self) -> bool {
         let source = (self.stat & 0x08) == 0x08;
         let flag = (self.stat & 0x03) == 0x00;
-        return source && flag;
+        source && flag
     }
 
     pub fn vertical_blank_int_match(&mut self) -> bool {
         let source = (self.stat & 0x10) == 0x10;
         let flag = (self.stat & 0x03) == 0x01;
-        return source && flag;
+        source && flag
     }
 
     pub fn get_lcd_mode(&self) -> u8 {
-        return self.stat & 0x03;
+        self.stat & 0x03
     }
 
     fn set_background_palette(&mut self, data: u8) {
@@ -235,66 +231,66 @@ impl GpuMemory {
     }
 
     pub fn is_bgw_enabled(&self) -> bool {
-        return (self.lcd_control & 0x01) == 0x01;
+        (self.lcd_control & 0x01) == 0x01
     }
 
     pub fn is_spr_enabled(&self) -> bool {
-        return (self.lcd_control & 0x02) == 0x02;
+        (self.lcd_control & 0x02) == 0x02
     }
 
     pub fn is_big_sprite(&self) -> bool {
-        return (self.lcd_control & 0x04) == 0x04;
+        (self.lcd_control & 0x04) == 0x04
     }
 
     pub fn get_background_tile_map(&self) -> (u16, u16) {
-        return match (self.lcd_control & 0x08) == 0x08 {
+        match (self.lcd_control & 0x08) == 0x08 {
             false => (0x9800, 0x9BFF),
             true => (0x9C00, 0x9FFF),
-        };
+        }
     }
 
     pub fn get_addr_mode_start(&self) -> u16 {
-        return match (self.lcd_control & 0x10) == 0x10 {
+        match (self.lcd_control & 0x10) == 0x10 {
             true => 0x8000,
             false => 0x9000,
-        };
+        }
     }
 
     pub fn is_window_enabled(&self) -> bool {
-        return (self.lcd_control & 0x20) == 0x20;
+        (self.lcd_control & 0x20) == 0x20
     }
 
     pub fn get_window_tile_map(&self) -> (u16, u16) {
-        return match (self.lcd_control & 0x40) == 0x40 {
+        match (self.lcd_control & 0x40) == 0x40 {
             false => (0x9800, 0x9BFF),
             true => (0x9C00, 0x9FFF),
-        };
+        }
     }
 
     pub fn is_physics_processing_unit_enabled(&self) -> bool {
-        return (self.lcd_control & 0x80) == 0x80;
+        (self.lcd_control & 0x80) == 0x80
     }
 
     pub fn is_window_visible(&self) -> bool {
-        return (self.ly >= self.window_y)
+        (self.ly >= self.window_y)
             && ((self.ly as u16) < (self.window_y as u16) + 0x90)
             && (self.window_x <= 0xA6)
-            && (self.window_y <= 0x8F);
+            && (self.window_y <= 0x8F)
     }
 
     pub fn ly(&self) -> usize {
-        return self.ly as usize;
+        self.ly as usize
     }
 
     pub fn scroll_x(&self) -> usize {
-        return self.scroll_x as usize;
+        self.scroll_x as usize
     }
 
     pub fn scroll_y(&self) -> usize {
-        return self.scroll_y as usize;
+        self.scroll_y as usize
     }
 
     pub fn window_x(&self) -> usize {
-        return self.window_x as usize;
+        self.window_x as usize
     }
 }

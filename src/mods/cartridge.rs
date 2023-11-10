@@ -50,8 +50,8 @@ impl Cartridge {
 
     pub fn checksum(&self, bytes: &[u8]) -> Result<u8, String> {
         let mut x: u16 = 0;
-        for i in 0..=24 {
-            x = x.wrapping_sub(bytes[i] as u16).wrapping_sub(1);
+        for item in bytes.iter().take(24 + 1) {
+            x = x.wrapping_sub(*item as u16).wrapping_sub(1);
         }
         if (x as u8) != self.checksum_val {
             println!("checksum failed");

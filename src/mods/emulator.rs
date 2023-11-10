@@ -31,12 +31,12 @@ pub struct Emulator {
 
 impl Emulator {
     pub fn new() -> Emulator {
-        return Emulator {
+        Emulator {
             cpu: Cpu::new(),
             cart: Cartridge::new(),
             sdl_context: None,
             video_subsystem: None
-        };
+        }
     }
 
     pub fn setup_emulator(&mut self, game_path: &str) {
@@ -110,7 +110,7 @@ impl Emulator {
 }
 
 pub fn convert_index4msb_to_rgba32(index: u8) -> [u8; 4] {
-    return match index {
+    match index {
         0x00 => [0, 0, 0, 255],
         0x05 => [96, 96, 96, 255],
         0x0A => [192, 192, 192, 255],

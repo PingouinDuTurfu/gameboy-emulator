@@ -30,20 +30,19 @@ impl Memory {
     }
 
     pub fn read_byte(&self, address: u16) -> u8 {
-        let byte = match address {
+        match address {
             ROM_START..=ROM_END => self.mbc.read_rom_byte(address),
             RAM_START..=RAM_END => self.mbc.read_ram_byte(address),
             WORKING_RAM_START..=WORKING_RAM_END => self.working_ram[usize::from(address - WORKING_RAM_START)],
             HIGH_RAM_START..=HIGH_RAM_END => self.high_ram[usize::from(address - HIGH_RAM_START)],
             0xFFFF => self.interrupt_enable,
             _ => panic!("TODO : Memory does not handle reads from: {:04X}", address),
-        };
-        byte
+        }
     }
 
     pub fn write_byte(&mut self, address: u16, data: u8) {
         match address {
-            ROM_START..=ROM_END => return, // On n'ecrit pas dans la ROM, car on est pas des animaux
+            ROM_START..=ROM_END => (), // On n'ecrit pas dans la ROM, car on est pas des animaux
             RAM_START..=RAM_END => self.mbc.write_ram_byte(address, data),
             WORKING_RAM_START..=WORKING_RAM_END => self.working_ram[usize::from(address - WORKING_RAM_START)] = data,
             HIGH_RAM_START..=HIGH_RAM_END => self.high_ram[usize::from(address - HIGH_RAM_START)] = data,
@@ -53,17 +52,16 @@ impl Memory {
     }
 
     pub fn read_byte_for_dma(&self, addr: u16) -> u8 {
-        let byte = match addr {
+        match addr {
             ROM_START..=ROM_END => self.mbc.read_rom_byte(addr),
             RAM_START..=RAM_END => self.mbc.read_ram_byte(addr),
             WORKING_RAM_START..=WORKING_RAM_END => self.working_ram[usize::from(addr - WORKING_RAM_START)],
             HIGH_RAM_START..=HIGH_RAM_END => self.high_ram[usize::from(addr - HIGH_RAM_START)],
             _ => panic!("TODO : Memory does not handle reads from: {:04X}", addr),
-        };
-        return byte;
+        }
     }
 
     pub fn interrupt_enable(&self) -> u8 {
-        return self.interrupt_enable;
+        self.interrupt_enable
     }
 }

@@ -70,9 +70,7 @@ impl PictureGeneration {
             PhysicsProcessingUnitState::PictureGeneration(self)
         } else {
             gpu_mem.set_stat_mode(MODE_HORIZONTAL_BLANK);
-            HorizontalBlank::new(
-                PictureGeneration::SCANLINE_CYCLES - ObjectAttributMemorySearch::MAX_CYCLES - self.cycles_counter,
-            )
+            HorizontalBlank::create(PictureGeneration::SCANLINE_CYCLES - ObjectAttributMemorySearch::MAX_CYCLES - self.cycles_counter)
         }
     }
 
@@ -89,7 +87,7 @@ impl PictureGeneration {
                 break;
             }
         }
-        return self.next(gpu_mem);
+        self.next(gpu_mem)
     }
 
     pub fn do_work(&mut self, gpu_mem: &mut GpuMemory) {
@@ -109,7 +107,7 @@ impl PictureGeneration {
     }
 
 
-    pub fn get_tile_num(&mut self, gpu_mem: &mut GpuMemory) -> FifoState {
+    pub fn get_tile_num(&mut self, gpu_mem: &GpuMemory) -> FifoState {
         let curr_tile;
         let map_start;
 
@@ -133,13 +131,13 @@ impl PictureGeneration {
             self.find_window_tile_num(gpu_mem);
         }
 
-        if self.spr_enable && gpu_mem.sprite_list.len() > 0 {
+        if self.spr_enable && !gpu_mem.sprite_list.is_empty() {
             self.search_spr_list(gpu_mem);
         }
 
         self.map_addr = PictureGeneration::calculate_addr(self.byte_index, gpu_mem);
         self.fetch_x += 1;
-        return FifoState::GetTileDataLow;
+        FifoState::GetTileDataLow
     }
 
     fn find_window_tile_num(&mut self, gpu_mem: &GpuMemory) {
@@ -168,7 +166,7 @@ impl PictureGeneration {
         }
     }
 
-    pub fn get_tile_data_low(&mut self, gpu_mem: &mut GpuMemory) -> FifoState {
+    pub fn get_tile_data_low(&mut self, gpu_mem: &GpuMemory) -> FifoState {
         let mut offset = 0;
         self.spr_data_lo.clear();
 
@@ -180,15 +178,15 @@ impl PictureGeneration {
             offset = 2 * (gpu_mem.window_line_counter % 8) as u16;
         }
 
-        if self.spr_enable && self.spr_indicies.len() > 0 {
+        if self.spr_enable && !self.spr_indicies.is_empty() {
             self.get_spr_tile_data(gpu_mem, 0);
         }
 
         self.bgw_lo = gpu_mem.video_ram[usize::from(self.map_addr + offset - VIDEO_RAM_START)];
-        return FifoState::GetTileDataHigh;
+        FifoState::GetTileDataHigh
     }
 
-    pub fn get_tile_data_high(&mut self, gpu_mem: &mut GpuMemory) -> FifoState {
+    pub fn get_tile_data_high(&mut self, gpu_mem: &GpuMemory) -> FifoState {
         let mut offset = 0;
         self.spr_data_hi.clear();
 
@@ -200,12 +198,12 @@ impl PictureGeneration {
             offset = (2 * (gpu_mem.window_line_counter % 8) as u16) + 1;
         }
 
-        if self.spr_enable && self.spr_indicies.len() > 0 {
+        if self.spr_enable && !self.spr_indicies.is_empty() {
             self.get_spr_tile_data(gpu_mem, 1);
         }
 
         self.bgw_hi = gpu_mem.video_ram[usize::from(self.map_addr + offset - VIDEO_RAM_START)];
-        return FifoState::Sleep;
+        FifoState::Sleep
     }
 
     fn get_spr_tile_data(&mut self, gpu_mem: &GpuMemory, offset: usize) {
@@ -236,7 +234,7 @@ impl PictureGeneration {
     }
 
     pub fn sleep(&mut self, _gpu_mem: &mut GpuMemory) -> FifoState {
-        return FifoState::Push;
+        FifoState::Push
     }
 
     pub fn push(&mut self, gpu_mem: &mut GpuMemory) -> FifoState {
@@ -245,7 +243,7 @@ impl PictureGeneration {
         }
         self.get_color_and_push(gpu_mem);
 
-        return FifoState::GetTile;
+        FifoState::GetTile
     }
 
     fn get_color_and_push(&mut self, gpu_mem: &mut GpuMemory) {
@@ -274,7 +272,7 @@ impl PictureGeneration {
             spr_scr_xpos = (spr.x_pos as i32) - 8 + (self.scx_lo) as i32;
 
             let mut offset = self.scanline_pos as i32 - spr_scr_xpos;
-            if offset < 0 || offset > 7 {
+            if !(0..=7).contains(&offset) {
                 continue;
             }
 
@@ -296,7 +294,7 @@ impl PictureGeneration {
             }
         }
 
-        return gpu_mem.background_colors_as_sdl_pixel_format_index4msb[bg_col];
+        gpu_mem.background_colors_as_sdl_pixel_format_index4msb[bg_col]
     }
 
     fn pop_fifo(&mut self, gpu_mem: &mut GpuMemory) {
@@ -306,9 +304,7 @@ impl PictureGeneration {
                 if ((self.scx_lo) <= self.discard_pixels) | self.window_y_trigger {
                     let index = usize::from(gpu_mem.ly) * NUM_PIXELS_X as usize * RBG24_BYTES_PER_PIXEL + usize::from(self.push_x) * RBG24_BYTES_PER_PIXEL;
                     let rgba32 = convert_index4msb_to_rgba32(val);
-                    for i in 0..=2 {
-                        gpu_mem.rgba32_pixels[index + i] = rgba32[i];
-                    }
+                    gpu_mem.rgba32_pixels[index..(2 + index + 1)].copy_from_slice(&rgba32[..(2 + 1)]);
                     self.push_x += 1;
                 } else {
                     self.discard_pixels += 1;
@@ -318,29 +314,28 @@ impl PictureGeneration {
     }
 
     pub fn read_byte(&self, _gpu_mem: &GpuMemory, addr: u16) -> u8 {
-        return match addr {
+        match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => 0xFF,
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => 0xFF,
             UNUSED_START..=UNUSED_END => 0x00, // Try returning 0xFF here
             _ => panic!("PPU (Pict Gen) doesnt read from address: {:04X}", addr),
-        };
+        }
     }
 
     pub fn write_byte(&mut self, _gpu_mem: &mut GpuMemory, addr: u16, _data: u8) {
         match addr {
-            VIDEO_RAM_START..=VIDEO_RAM_END => return,
-            OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => return,
-            UNUSED_START..=UNUSED_END => return,
+            VIDEO_RAM_START..=VIDEO_RAM_END => (),
+            OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => (),
+            UNUSED_START..=UNUSED_END => (),
             _ => panic!("PPU (Pict Gen) doesnt write to address: {:04X}", addr),
         }
     }
 
     fn calculate_addr(tile_index: u8, gpu_mem: &GpuMemory) -> u16 {
-        let addr: u16 = match gpu_mem.get_addr_mode_start() {
+        match gpu_mem.get_addr_mode_start() {
             0x8000 => 0x8000 + (u16::from(tile_index) * 16),
             0x9000 => (0x9000 + (isize::from(tile_index as i8) * BYTES_PER_TILE_SIGNED)) as u16,
             _ => panic!("get_addr_mode only returns 0x9000 or 0x8000"),
-        };
-        return addr;
+        }
     }
 }

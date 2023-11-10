@@ -11,7 +11,7 @@ impl ObjectAttributMemorySearch {
     pub const MAX_CYCLES: usize = 80;
     const MAX_SCANLINE_SPRITES: usize = 10;
     const OAM_LENGTH: usize = 160;
-    pub fn new() -> PhysicsProcessingUnitState {
+    pub fn create() -> PhysicsProcessingUnitState {
         PhysicsProcessingUnitState::ObjectAttributeMemory(ObjectAttributMemorySearch { cycles_counter: 0 })
     }
     fn next(self, gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {

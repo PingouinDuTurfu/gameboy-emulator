@@ -9,7 +9,7 @@ pub struct HorizontalBlank {
 }
 
 impl HorizontalBlank {
-    pub fn new(cycles_remaining: usize) -> PhysicsProcessingUnitState {
+    pub fn create(cycles_remaining: usize) -> PhysicsProcessingUnitState {
         PhysicsProcessingUnitState::HorizontalBlank(HorizontalBlank {
             cycles_counter: 0,
             cycles_to_run: cycles_remaining,
@@ -28,10 +28,10 @@ impl HorizontalBlank {
 
             if gpu_mem.ly < 144 {
                 gpu_mem.set_stat_mode(MODE_OBJECT_ATTRIBUTE_MEMORY_SEARCH);
-                ObjectAttributMemorySearch::new()
+                ObjectAttributMemorySearch::create()
             } else {
                 gpu_mem.set_stat_mode(MODE_VERTICAL_BLANK);
-                VerticalBlank::new()
+                VerticalBlank::create()
             }
         }
     }

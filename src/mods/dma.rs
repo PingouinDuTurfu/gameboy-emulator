@@ -37,8 +37,7 @@ impl OamDma {
         if addr != DMA_REG {
             panic!("dma should not write to addr: {:04X}", addr);
         }
-
-        return self.dma;
+        self.dma
     }
 
     pub fn write_dma(&mut self, addr: u16, data: u8) {
@@ -63,23 +62,23 @@ impl OamDma {
     }
 
     pub fn dma_active(&self) -> bool {
-        return self.in_transfer;
+        self.in_transfer
     }
 
     pub fn calc_addr(&mut self) -> u16 {
         (self.dma as u16 * DMA_SRC_MUL) + self.cycles
     }
     pub fn cycles(&self) -> u16 {
-        return self.cycles;
+        self.cycles
     }
 
     pub fn delay_rem(&self) -> usize {
-        return self.delay_cycles;
+        self.delay_cycles
     }
 
     pub fn incr_cycles(&mut self, graphics: &mut Graphics) {
         self.cycles += 1;
-        if self.cycles > DMA_MAX_CYCLES as u16 {
+        if self.cycles > DMA_MAX_CYCLES {
             self.stop_dma_transfer();
             graphics.set_dma_transfer(false);
         }

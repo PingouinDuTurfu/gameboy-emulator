@@ -17,16 +17,16 @@ pub enum PhysicsProcessingUnitState {
     PictureGeneration(PictureGeneration), // 11 -> CPU can't access to both display RAM and OAM (0x8000-0x9FFF, 0xFE00-0xFE90)
     None
 }
-pub fn init(_gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {
-    return VerticalBlank::init();
+pub fn init(_gpu_mem: &GpuMemory) -> PhysicsProcessingUnitState {
+    VerticalBlank::init()
 }
 
 pub fn enable(gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {
     gpu_mem.set_stat_mode(MODE_PICTURE_GENERATION);
-    return PhysicsProcessingUnitState::PictureGeneration(PictureGeneration::new());
+    PhysicsProcessingUnitState::PictureGeneration(PictureGeneration::new())
 }
 
 pub fn disable(gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {
     gpu_mem.set_stat_mode(MODE_HORIZONTAL_BLANK);
-    return HorizontalBlank::new(0);
+    HorizontalBlank::create(0)
 }

@@ -24,22 +24,19 @@ enum TimaOverflowState {
 impl TimaOverflowState {
 
     pub fn is_done(&self) -> bool {
-        match self {
-            TimaOverflowState::Done => true,
-            _ => false,
-        }
+        matches!(self, TimaOverflowState::Done)
     }
 }
 
 impl Timer {
     pub fn new() -> Timer {
-        return Timer {
+        Timer {
             div: 0,
             tima: 0,
             tma: 0,
             tac: 0,
             overflow_source: TimaOverflowState::None,
-        };
+        }
     }
 
     pub fn init(&mut self) {
@@ -50,13 +47,13 @@ impl Timer {
     }
 
     pub fn read_byte(&self, addr: u16) -> u8 {
-        return match addr {
+        match addr {
             DIV_REG => (self.div >> 8) as u8,
             TIMA_REG => self.tima,
             TMA_REG => self.tma,
             TAC_REG => self.tac,
             _ => panic!("Timer does not handle reads from addr: {}", addr),
-        };
+        }
     }
 
     pub fn write_byte(&mut self, addr: u16, data: u8) {
@@ -151,29 +148,29 @@ impl Timer {
             self.overflow_source = TimaOverflowState::Advancing;
         }
 
-        return overflow;
+        overflow
     }
 
     pub fn decode_tac(&mut self) -> (bool, usize) {
         let tac = self.tac;
 
-        return match ((tac & 0x04) == 0x04, tac & 0x03) {
+        match ((tac & 0x04) == 0x04, tac & 0x03) {
             (enable, 0) => (enable, 1024),
             (enable, 1) => (enable, 16),
             (enable, 2) => (enable, 64),
             (enable, 3) => (enable, 256),
             _ => panic!("Should be impossible"),
-        };
+        }
     }
 
     fn div_tac_multiplexer(&self) -> bool {
-        return match self.tac & 0x03 {
+        match self.tac & 0x03 {
             0 => (self.div >> 9) & 0x01 == 0x01,
             1 => (self.div >> 3) & 0x01 == 0x01,
             2 => (self.div >> 5) & 0x01 == 0x01,
             3 => (self.div >> 7) & 0x01 == 0x01,
             _ => panic!("double check the `AND` operation"),
-        };
+        }
     }
 
     fn detected_falling_edge(
@@ -183,6 +180,6 @@ impl Timer {
         old_enbl: bool,
         new_enbl: bool,
     ) -> bool {
-        return (old_div && old_enbl) && !(new_div && new_enbl);
+        (old_div && old_enbl) && !(new_div && new_enbl)
     }
 }

@@ -19,9 +19,9 @@ pub struct Graphics {
 
 impl Graphics {
     pub fn new() -> Graphics {
-        let mut gpu_mem = GpuMemory::new();
+        let gpu_mem = GpuMemory::new();
         Graphics {
-            state: physics_processing_unit::init(&mut gpu_mem),
+            state: physics_processing_unit::init(&gpu_mem),
             gpu_data: GpuMemory::new(),
             frame_ready: false,
             cycles: 0,
@@ -34,13 +34,13 @@ impl Graphics {
     }
 
     pub fn read_byte(&self, addr: u16) -> u8 {
-        return match &self.state {
+        match &self.state {
             ObjectAttributeMemory(os) => os.read_byte(&self.gpu_data, addr),
             PictureGeneration(pg) => pg.read_byte(&self.gpu_data, addr),
             HorizontalBlank(hb) => hb.read_byte(&self.gpu_data, addr),
             VerticalBlank(vb) => vb.read_byte(&self.gpu_data, addr),
             _ => panic!("Physic Processing Unit not cover this state {:04X}", addr),
-        };
+        }
     }
 
     pub fn write_byte(&mut self, addr: u16, data: u8) {
@@ -53,12 +53,12 @@ impl Graphics {
         }
     }
     pub fn read_byte_for_dma(&self, addr: u16) -> u8 {
-        return match addr {
+        match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => self.gpu_data.video_ram[usize::from(addr - VIDEO_RAM_START)],
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => self.gpu_data.video_ram[usize::from(addr - OBJECT_ATTRIBUTE_MEMORY_START)],
             0xFEA0..=0xFEFF => 0x00,
             _ => panic!("DMA shouldnt not read from address: {:04X}", addr),
-        };
+        }
     }
     pub fn write_byte_for_dma(&mut self, addr: u16, data: u8) {
         self.gpu_data.object_attribute_memory[usize::from(addr)] = data;
@@ -147,12 +147,12 @@ impl Graphics {
             (_, true) | (2, _) | (1, _) | (0, _) => {
                 self.gpu_data.dot_matrix_game_stat_quirk = Some(data);
                 self.gpu_data.dot_matrix_game_stat_quirk_delay = true;
-                return true;
+                true
             }
             _ => {
                 self.gpu_data.dot_matrix_game_stat_quirk = None;
                 self.gpu_data.dot_matrix_game_stat_quirk_delay = false;
-                return false;
+                false
             }
         }
     }
@@ -172,6 +172,6 @@ impl Graphics {
             self.previous_frame_time = Instant::now();
             return true;
         }
-        return false;
+        false
     }
 }

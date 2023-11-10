@@ -20,16 +20,13 @@ impl InputOutput {
     }
 
     pub fn read_byte(&self, addr: u16) -> u8 {
-        return self.input_output[usize::from(addr - IO_START)];
+        self.input_output[usize::from(addr - IO_START)]
     }
 
     pub fn write_byte(&mut self, address: u16, data: u8) {
-        match address {
-            IF_REG => {
-                self.input_output[usize::from(IF_REG  - IO_START)] = data | 0xE0;
-                self.if_register_trigger = true;
-            }
-            _ => return,
+        if address == IF_REG {
+            self.input_output[usize::from(IF_REG  - IO_START)] = data | 0xE0;
+            self.if_register_trigger = true;
         }
     }
 
@@ -39,23 +36,23 @@ impl InputOutput {
 
     pub fn request_keypad_interrupt(&mut self) {
         let if_register_trigger = usize::from(IF_REG - IO_START);
-        self.input_output[if_register_trigger] = self.input_output[if_register_trigger] | 0xF0;
+        self.input_output[if_register_trigger] |= 0xF0;
     }
 
     pub fn request_timer_interrupt(&mut self) {
         if !self.if_register_trigger {
             let if_register_trigger = usize::from(IF_REG - IO_START);
-            self.input_output[if_register_trigger] = self.input_output[if_register_trigger] | 0xE4;
+            self.input_output[if_register_trigger] |= 0xE4;
         }
     }
 
     pub fn request_stat_interrupt(&mut self) {
         let if_register_trigger = usize::from(IF_REG - IO_START);
-        self.input_output[if_register_trigger] = self.input_output[if_register_trigger] | 0xE2;
+        self.input_output[if_register_trigger] |= 0xE2;
     }
 
     pub fn request_vertical_blank_interrupt(&mut self) {
         let if_register_trigger = usize::from(IF_REG - IO_START);
-        self.input_output[if_register_trigger] = self.input_output[if_register_trigger] | 0xE1;
+        self.input_output[if_register_trigger] |= 0xE1;
     }
 }

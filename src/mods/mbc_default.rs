@@ -7,7 +7,7 @@ pub const RAM_END: u16 = 0xBFFF;
 
 pub struct MbcDefault {
     rom: [u8; 0x8000],  // De 0x0000 à 0x7FFF
-    ram: [u8; 0x4000],  // De 0xA000 à 0xBFFF
+    ram: [u8; 0x2000],  // De 0xA000 à 0xBFFF
 }
 
 impl MbcDefault {
@@ -15,7 +15,7 @@ impl MbcDefault {
         println!("MBCNone");
         MbcDefault {
             rom: [0; 0x8000],
-            ram: [0; 0x4000],
+            ram: [0; 0x2000]
         }
     }
 
