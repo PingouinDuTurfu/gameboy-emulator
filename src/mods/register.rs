@@ -20,13 +20,13 @@ impl Registers {
             c: 0x00,
             d: 0x00,
             e: 0x00,
-            f: FlagsRegister::new(),
+            f: FlagsRegister::default(),
             h: 0x00,
             l: 0x00,
         }
     }
 
-    pub fn init(self: &mut Self, checksum: u8) {
+    pub fn init(&mut self, checksum: u8) {
         if checksum == 0x00 {
             self.set_af(0x0180);
         } else {

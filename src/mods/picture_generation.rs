@@ -41,7 +41,7 @@ impl PictureGeneration {
     const FIFO_MIN_PIXELS: usize = 8;
 
     pub fn new() -> PictureGeneration {
-        return PictureGeneration {
+        PictureGeneration {
             cycles_counter: 0,
             fifo_state: FifoState::GetTile,
             fetch_x: 0,
@@ -62,17 +62,17 @@ impl PictureGeneration {
             bgw_enable: false,
             spr_enable: false,
             window_y_trigger: false,
-        };
+        }
     }
 
-    fn next(self: Self, gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {
+    fn next(self, gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {
         if (self.push_x) < NUM_PIXELS_X as u8 {
-            return PhysicsProcessingUnitState::PictureGeneration(self);
+            PhysicsProcessingUnitState::PictureGeneration(self)
         } else {
             gpu_mem.set_stat_mode(MODE_HORIZONTAL_BLANK);
-            return HorizontalBlank::new(
+            HorizontalBlank::new(
                 PictureGeneration::SCANLINE_CYCLES - ObjectAttributMemorySearch::MAX_CYCLES - self.cycles_counter,
-            );
+            )
         }
     }
 
@@ -92,7 +92,7 @@ impl PictureGeneration {
         return self.next(gpu_mem);
     }
 
-    pub fn do_work(self: &mut Self, gpu_mem: &mut GpuMemory) {
+    pub fn do_work(&mut self, gpu_mem: &mut GpuMemory) {
         // Attempt every other dot
         if (self.cycles_counter % 2) == 0 {
             self.fifo_state = match self.fifo_state {
@@ -102,16 +102,14 @@ impl PictureGeneration {
                 FifoState::Sleep => self.sleep(gpu_mem),
                 FifoState::Push => self.push(gpu_mem)
             };
-        } else {
-            if let FifoState::Push = self.fifo_state {
-                self.fifo_state = self.push(gpu_mem);
-            }
+        } else if let FifoState::Push = self.fifo_state {
+            self.fifo_state = self.push(gpu_mem);
         }
         self.pop_fifo(gpu_mem);
     }
 
 
-    pub fn get_tile_num(self: &mut Self, gpu_mem: &mut GpuMemory) -> FifoState {
+    pub fn get_tile_num(&mut self, gpu_mem: &mut GpuMemory) -> FifoState {
         let curr_tile;
         let map_start;
 
@@ -144,7 +142,7 @@ impl PictureGeneration {
         return FifoState::GetTileDataLow;
     }
 
-    fn find_window_tile_num(self: &mut Self, gpu_mem: &mut GpuMemory) {
+    fn find_window_tile_num(&mut self, gpu_mem: &GpuMemory) {
         let fetcher_pos = (self.fetch_x * 8) + 7;
         if fetcher_pos >= gpu_mem.window_x() {
             let index = (32 * (gpu_mem.window_line_counter as usize / 8))
@@ -155,7 +153,7 @@ impl PictureGeneration {
         }
     }
 
-    fn search_spr_list(self: &mut Self, gpu_mem: &mut GpuMemory) {
+    fn search_spr_list(&mut self, gpu_mem: &GpuMemory) {
         for (i, sprite) in gpu_mem.sprite_list.iter().enumerate() {
             if sprite.x_pos < 168 && sprite.x_pos > 0 {
                 // Sprite with xpos >= 168 or x == 0 should be hidden
@@ -170,7 +168,7 @@ impl PictureGeneration {
         }
     }
 
-    pub fn get_tile_data_low(self: &mut Self, gpu_mem: &mut GpuMemory) -> FifoState {
+    pub fn get_tile_data_low(&mut self, gpu_mem: &mut GpuMemory) -> FifoState {
         let mut offset = 0;
         self.spr_data_lo.clear();
 
@@ -190,7 +188,7 @@ impl PictureGeneration {
         return FifoState::GetTileDataHigh;
     }
 
-    pub fn get_tile_data_high(self: &mut Self, gpu_mem: &mut GpuMemory) -> FifoState {
+    pub fn get_tile_data_high(&mut self, gpu_mem: &mut GpuMemory) -> FifoState {
         let mut offset = 0;
         self.spr_data_hi.clear();
 
@@ -210,7 +208,7 @@ impl PictureGeneration {
         return FifoState::Sleep;
     }
 
-    fn get_spr_tile_data(self: &mut Self, gpu_mem: &mut GpuMemory, offset: usize) {
+    fn get_spr_tile_data(&mut self, gpu_mem: &GpuMemory, offset: usize) {
         let ly = gpu_mem.ly as i32;
         let spr_height = if self.big_spr { 16 } else { 8 };
         let mut tile_index;
@@ -237,11 +235,11 @@ impl PictureGeneration {
         }
     }
 
-    pub fn sleep(self: &mut Self, _gpu_mem: &mut GpuMemory) -> FifoState {
+    pub fn sleep(&mut self, _gpu_mem: &mut GpuMemory) -> FifoState {
         return FifoState::Push;
     }
 
-    pub fn push(self: &mut Self, gpu_mem: &mut GpuMemory) -> FifoState {
+    pub fn push(&mut self, gpu_mem: &mut GpuMemory) -> FifoState {
         if gpu_mem.background_pixel_fifo.len() > 8 {
             return FifoState::Push;
         }
@@ -250,7 +248,7 @@ impl PictureGeneration {
         return FifoState::GetTile;
     }
 
-    fn get_color_and_push(self: &mut Self, gpu_mem: &mut GpuMemory) {
+    fn get_color_and_push(&mut self, gpu_mem: &mut GpuMemory) {
         for shift in 0..=7 {
             let p1 = (self.bgw_hi >> (7 - shift)) & 0x01;
             let p0 = (self.bgw_lo >> (7 - shift)) & 0x01;
@@ -268,7 +266,7 @@ impl PictureGeneration {
         }
     }
 
-    fn fetch_and_merge(self: &mut Self, gpu_mem: &mut GpuMemory, bg_col: usize) -> u8 {
+    fn fetch_and_merge(&mut self, gpu_mem: &GpuMemory, bg_col: usize) -> u8 {
         let mut spr_scr_xpos;
         let mut spr;
         for (list_idx, orig_idx) in self.spr_indicies.iter().enumerate() {
@@ -301,7 +299,7 @@ impl PictureGeneration {
         return gpu_mem.background_colors_as_sdl_pixel_format_index4msb[bg_col];
     }
 
-    fn pop_fifo(self: &mut Self, gpu_mem: &mut GpuMemory) {
+    fn pop_fifo(&mut self, gpu_mem: &mut GpuMemory) {
         if gpu_mem.background_pixel_fifo.len() > PictureGeneration::FIFO_MIN_PIXELS {
             let pixel: Option<u8> = gpu_mem.background_pixel_fifo.pop_front();
             if let Some(val) = pixel {
@@ -319,7 +317,7 @@ impl PictureGeneration {
         }
     }
 
-    pub fn read_byte(self: &Self, _gpu_mem: &GpuMemory, addr: u16) -> u8 {
+    pub fn read_byte(&self, _gpu_mem: &GpuMemory, addr: u16) -> u8 {
         return match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => 0xFF,
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => 0xFF,
@@ -328,7 +326,7 @@ impl PictureGeneration {
         };
     }
 
-    pub fn write_byte(self: &mut Self, _gpu_mem: &mut GpuMemory, addr: u16, _data: u8) {
+    pub fn write_byte(&mut self, _gpu_mem: &mut GpuMemory, addr: u16, _data: u8) {
         match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => return,
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => return,

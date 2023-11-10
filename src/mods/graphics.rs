@@ -29,11 +29,11 @@ impl Graphics {
         }
     }
 
-    pub fn init(self: &mut Self) {
+    pub fn init(&mut self) {
         self.gpu_data.init();
     }
 
-    pub fn read_byte(self: &Self, addr: u16) -> u8 {
+    pub fn read_byte(&self, addr: u16) -> u8 {
         return match &self.state {
             ObjectAttributeMemory(os) => os.read_byte(&self.gpu_data, addr),
             PictureGeneration(pg) => pg.read_byte(&self.gpu_data, addr),
@@ -43,7 +43,7 @@ impl Graphics {
         };
     }
 
-    pub fn write_byte(self: &mut Self, addr: u16, data: u8) {
+    pub fn write_byte(&mut self, addr: u16, data: u8) {
         match &mut self.state {
             ObjectAttributeMemory(os) => os.write_byte(&mut self.gpu_data, addr, data),
             PictureGeneration(pg) => pg.write_byte(&mut self.gpu_data, addr, data),
@@ -52,7 +52,7 @@ impl Graphics {
             _ => panic!("Physic Processing Unit not cover this state {:04X}", addr),
         }
     }
-    pub fn read_byte_for_dma(self: &Self, addr: u16) -> u8 {
+    pub fn read_byte_for_dma(&self, addr: u16) -> u8 {
         return match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => self.gpu_data.video_ram[usize::from(addr - VIDEO_RAM_START)],
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => self.gpu_data.video_ram[usize::from(addr - OBJECT_ATTRIBUTE_MEMORY_START)],
@@ -60,15 +60,15 @@ impl Graphics {
             _ => panic!("DMA shouldnt not read from address: {:04X}", addr),
         };
     }
-    pub fn write_byte_for_dma(self: &mut Self, addr: u16, data: u8) {
+    pub fn write_byte_for_dma(&mut self, addr: u16, data: u8) {
         self.gpu_data.object_attribute_memory[usize::from(addr)] = data;
     }
 
-    pub fn read_io_byte(self: &Self, addr: u16) -> u8 {
+    pub fn read_io_byte(&self, addr: u16) -> u8 {
         self.gpu_data.read_physics_processing_unit_io(addr)
     }
 
-    pub fn write_io_byte(self: &mut Self, addr: u16, data: u8) {
+    pub fn write_io_byte(&mut self, addr: u16, data: u8) {
         match addr {
             LCD_CONTROL_REG => {
                 let is_enable_old = self.gpu_data.is_physics_processing_unit_enabled();
@@ -91,7 +91,7 @@ impl Graphics {
         }
     }
 
-    pub fn adv_cycles(self: &mut Self, io: &mut InputOutput, cycles: usize) {
+    pub fn adv_cycles(&mut self, io: &mut InputOutput, cycles: usize) {
         if !self.gpu_data.is_physics_processing_unit_enabled() {
             return;
         }
@@ -127,7 +127,7 @@ impl Graphics {
         }
     }
 
-    pub fn disable_ppu(self: &mut Self) {
+    pub fn disable_ppu(&mut self) {
         self.state = physics_processing_unit::disable(&mut self.gpu_data);
         self.gpu_data.rgba32_pixels.iter_mut().for_each(|pix| *pix = 0);
         self.gpu_data.window_line_counter = 0;
@@ -135,14 +135,14 @@ impl Graphics {
         self.gpu_data.ly = 0;
     }
 
-    pub fn enable_ppu(self: &mut Self) {
+    pub fn enable_ppu(&mut self) {
         self.state = physics_processing_unit::enable(&mut self.gpu_data);
         self.gpu_data.set_ly(0);
         self.gpu_data.sprite_list.clear();
         self.gpu_data.stat_low_to_high = false;
     }
 
-    pub fn stat_quirk(self: &mut Self, data: u8) -> bool {
+    pub fn stat_quirk(&mut self, data: u8) -> bool {
         match (self.gpu_data.get_lcd_mode(), self.gpu_data.ly_compare()) {
             (_, true) | (2, _) | (1, _) | (0, _) => {
                 self.gpu_data.dot_matrix_game_stat_quirk = Some(data);
@@ -157,11 +157,11 @@ impl Graphics {
         }
     }
 
-    pub fn set_dma_transfer(self: &mut Self, status: bool) {
+    pub fn set_dma_transfer(&mut self, status: bool) {
         self.gpu_data.direct_memory_access_transfer = status;
     }
 
-    pub fn update_display(self: &mut Self, texture: &mut Texture) -> bool {
+    pub fn update_display(&mut self, texture: &mut Texture) -> bool {
         if self.frame_ready {
             texture
                 .update(None, &self.gpu_data.rgba32_pixels, NUM_PIXELS_X as usize * RBG24_BYTES_PER_PIXEL)

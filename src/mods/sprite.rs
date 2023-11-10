@@ -10,7 +10,7 @@ pub struct Sprite {
 
 impl Sprite {
     pub fn new(sprite_bytes: &[u8]) -> Sprite {
-        return Sprite {
+        Sprite {
             y_pos: sprite_bytes[0],
             x_pos: sprite_bytes[1],
             tile_index: sprite_bytes[2],
@@ -18,6 +18,6 @@ impl Sprite {
             flip_y: (sprite_bytes[3] >> 6) & 0x01 == 0x01,
             flip_x: (sprite_bytes[3] >> 5) & 0x01 == 0x01,
             dot_matrix_game_palette: (sprite_bytes[3] >> 4) & 0x01 == 0x01,
-        };
+        }
     }
 }

@@ -90,7 +90,7 @@ impl GpuMemory {
         };
     }
 
-    pub fn init(self: &mut Self) {
+    pub fn init(&mut self) {
         self.lcd_control = 0x91;
         self.stat = 0x85;
         self.scroll_y = 0x00;
@@ -108,7 +108,7 @@ impl GpuMemory {
         self.object_colors_2_as_sdl_pixel_format_index4msb[0] = 0xFF;
     }
 
-    pub fn read_physics_processing_unit_io(self: &Self, addr: u16) -> u8 {
+    pub fn read_physics_processing_unit_io(&self, addr: u16) -> u8 {
         return match addr {
             LCD_CONTROL_REG => self.lcd_control,
             STAT_REG => self.stat,
@@ -125,7 +125,7 @@ impl GpuMemory {
         };
     }
 
-    pub fn write_physics_processing_unit_io(self: &mut Self, addr: u16, data: u8) {
+    pub fn write_physics_processing_unit_io(&mut self, addr: u16, data: u8) {
         match addr {
             LCD_CONTROL_REG => self.lcd_control = data,
             STAT_REG => {
@@ -150,16 +150,16 @@ impl GpuMemory {
         }
     }
 
-    pub fn set_ly(self: &mut Self, val: u8) {
+    pub fn set_ly(&mut self, val: u8) {
         self.ly = val;
         self.update_stat_ly(self.ly_compare());
     }
 
-    pub fn ly_compare(self: &Self) -> bool {
+    pub fn ly_compare(&self) -> bool {
         return self.lyc == self.ly;
     }
 
-    pub fn update_stat_ly(self: &mut Self, equal: bool) {
+    pub fn update_stat_ly(&mut self, equal: bool) {
         if equal {
             self.stat = self.stat | 0x04;
         } else {
@@ -168,7 +168,7 @@ impl GpuMemory {
         self.check_interrupt_sources();
     }
 
-    pub fn set_stat_mode(self: &mut Self, mode: u8) {
+    pub fn set_stat_mode(&mut self, mode: u8) {
         if mode == 0x01 && self.ly == 0x90 {
             self.vertical_blank_int = true;
         } else {
@@ -178,7 +178,7 @@ impl GpuMemory {
         self.check_interrupt_sources();
     }
 
-    pub fn check_interrupt_sources(self: &mut Self) {
+    pub fn check_interrupt_sources(&mut self) {
         let mut new_stat_int = false;
 
         if self.lyc_int_match()
@@ -194,107 +194,107 @@ impl GpuMemory {
         self.stat_int = new_stat_int;
     }
 
-    pub fn lyc_int_match(self: &mut Self) -> bool {
+    pub fn lyc_int_match(&mut self) -> bool {
         let source = (self.stat & 0x40) == 0x40;
         let flag = (self.stat & 0x04) == 0x04;
         return source && flag;
     }
 
-    pub fn object_attribute_memory_int_match(self: &mut Self) -> bool {
+    pub fn object_attribute_memory_int_match(&mut self) -> bool {
         let source = (self.stat & 0x20) == 0x20;
         let flag = (self.stat & 0x03) == 0x02;
         return source && flag;
     }
 
-    pub fn horizontal_blank_int_match(self: &mut Self) -> bool {
+    pub fn horizontal_blank_int_match(&mut self) -> bool {
         let source = (self.stat & 0x08) == 0x08;
         let flag = (self.stat & 0x03) == 0x00;
         return source && flag;
     }
 
-    pub fn vertical_blank_int_match(self: &mut Self) -> bool {
+    pub fn vertical_blank_int_match(&mut self) -> bool {
         let source = (self.stat & 0x10) == 0x10;
         let flag = (self.stat & 0x03) == 0x01;
         return source && flag;
     }
 
-    pub fn get_lcd_mode(self: &Self) -> u8 {
+    pub fn get_lcd_mode(&self) -> u8 {
         return self.stat & 0x03;
     }
 
-    fn set_background_palette(self: &mut Self, data: u8) {
+    fn set_background_palette(&mut self, data: u8) {
         self.background_palette = data;
     }
 
-    fn set_object_palette_0_palette(self: &mut Self, data: u8) {
+    fn set_object_palette_0_palette(&mut self, data: u8) {
         self.object_palette_0 = data;
     }
 
-    fn set_object_palette_1_palette(self: &mut Self, data: u8) {
+    fn set_object_palette_1_palette(&mut self, data: u8) {
         self.object_palette_1 = data;
     }
 
-    pub fn is_bgw_enabled(self: &Self) -> bool {
+    pub fn is_bgw_enabled(&self) -> bool {
         return (self.lcd_control & 0x01) == 0x01;
     }
 
-    pub fn is_spr_enabled(self: &Self) -> bool {
+    pub fn is_spr_enabled(&self) -> bool {
         return (self.lcd_control & 0x02) == 0x02;
     }
 
-    pub fn is_big_sprite(self: &Self) -> bool {
+    pub fn is_big_sprite(&self) -> bool {
         return (self.lcd_control & 0x04) == 0x04;
     }
 
-    pub fn get_background_tile_map(self: &Self) -> (u16, u16) {
+    pub fn get_background_tile_map(&self) -> (u16, u16) {
         return match (self.lcd_control & 0x08) == 0x08 {
             false => (0x9800, 0x9BFF),
             true => (0x9C00, 0x9FFF),
         };
     }
 
-    pub fn get_addr_mode_start(self: &Self) -> u16 {
+    pub fn get_addr_mode_start(&self) -> u16 {
         return match (self.lcd_control & 0x10) == 0x10 {
             true => 0x8000,
             false => 0x9000,
         };
     }
 
-    pub fn is_window_enabled(self: &Self) -> bool {
+    pub fn is_window_enabled(&self) -> bool {
         return (self.lcd_control & 0x20) == 0x20;
     }
 
-    pub fn get_window_tile_map(self: &Self) -> (u16, u16) {
+    pub fn get_window_tile_map(&self) -> (u16, u16) {
         return match (self.lcd_control & 0x40) == 0x40 {
             false => (0x9800, 0x9BFF),
             true => (0x9C00, 0x9FFF),
         };
     }
 
-    pub fn is_physics_processing_unit_enabled(self: &Self) -> bool {
+    pub fn is_physics_processing_unit_enabled(&self) -> bool {
         return (self.lcd_control & 0x80) == 0x80;
     }
 
-    pub fn is_window_visible(self: &Self) -> bool {
+    pub fn is_window_visible(&self) -> bool {
         return (self.ly >= self.window_y)
             && ((self.ly as u16) < (self.window_y as u16) + 0x90)
             && (self.window_x <= 0xA6)
             && (self.window_y <= 0x8F);
     }
 
-    pub fn ly(self: &Self) -> usize {
+    pub fn ly(&self) -> usize {
         return self.ly as usize;
     }
 
-    pub fn scroll_x(self: &Self) -> usize {
+    pub fn scroll_x(&self) -> usize {
         return self.scroll_x as usize;
     }
 
-    pub fn scroll_y(self: &Self) -> usize {
+    pub fn scroll_y(&self) -> usize {
         return self.scroll_y as usize;
     }
 
-    pub fn window_x(self: &Self) -> usize {
+    pub fn window_x(&self) -> usize {
         return self.window_x as usize;
     }
 }

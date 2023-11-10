@@ -5,7 +5,15 @@ pub struct FlagsRegister {
     pub half_carry: bool,
     pub carry: bool
 }
+
+impl Default for FlagsRegister {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FlagsRegister {
+
     pub fn new() -> FlagsRegister {
         FlagsRegister {
             zero: false,

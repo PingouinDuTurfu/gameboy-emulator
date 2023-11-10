@@ -23,7 +23,7 @@ enum TimaOverflowState {
 
 impl TimaOverflowState {
 
-    pub fn is_done(self: &Self) -> bool {
+    pub fn is_done(&self) -> bool {
         match self {
             TimaOverflowState::Done => true,
             _ => false,
@@ -42,14 +42,14 @@ impl Timer {
         };
     }
 
-    pub fn init(self: &mut Self) {
+    pub fn init(&mut self) {
         self.div = 0xABCC;
         self.tima = 0x00;
         self.tma = 0x00;
         self.tac = 0xF8;
     }
 
-    pub fn read_byte(self: &Self, addr: u16) -> u8 {
+    pub fn read_byte(&self, addr: u16) -> u8 {
         return match addr {
             DIV_REG => (self.div >> 8) as u8,
             TIMA_REG => self.tima,
@@ -59,7 +59,7 @@ impl Timer {
         };
     }
 
-    pub fn write_byte(self: &mut Self, addr: u16, data: u8) {
+    pub fn write_byte(&mut self, addr: u16, data: u8) {
         match addr {
             DIV_REG => self.write_div(),
             TIMA_REG => {
@@ -83,7 +83,7 @@ impl Timer {
         }
     }
 
-    pub fn adv_cycles(self: &mut Self, io: &mut InputOutput, cycles: usize) {
+    pub fn adv_cycles(&mut self, io: &mut InputOutput, cycles: usize) {
         match self.overflow_source {
             TimaOverflowState::Advancing => {
                 self.tima = self.tma;
@@ -110,7 +110,7 @@ impl Timer {
         io.clean_if_register_trigger();
     }
 
-    fn write_div(self: &mut Self) {
+    fn write_div(&mut self) {
         let (timer_enable, _) = self.decode_tac();
         let old_div_bit = self.div_tac_multiplexer();
 
@@ -125,7 +125,7 @@ impl Timer {
         }
     }
 
-    fn write_tac(self: &mut Self, data: u8) {
+    fn write_tac(&mut self, data: u8) {
         let old_div_bit = self.div_tac_multiplexer();
         let (old_enbl, _) = self.decode_tac();
 
@@ -141,7 +141,7 @@ impl Timer {
         }
     }
 
-    fn incr_timer(self: &mut Self) -> bool {
+    fn incr_timer(&mut self) -> bool {
         let (new_tima, overflow) = self.tima.overflowing_add(1);
 
         self.tima = new_tima;
@@ -154,7 +154,7 @@ impl Timer {
         return overflow;
     }
 
-    pub fn decode_tac(self: &mut Self) -> (bool, usize) {
+    pub fn decode_tac(&mut self) -> (bool, usize) {
         let tac = self.tac;
 
         return match ((tac & 0x04) == 0x04, tac & 0x03) {
@@ -166,7 +166,7 @@ impl Timer {
         };
     }
 
-    fn div_tac_multiplexer(self: &Self) -> bool {
+    fn div_tac_multiplexer(&self) -> bool {
         return match self.tac & 0x03 {
             0 => (self.div >> 9) & 0x01 == 0x01,
             1 => (self.div >> 3) & 0x01 == 0x01,
@@ -177,7 +177,7 @@ impl Timer {
     }
 
     fn detected_falling_edge(
-        self: &Self,
+        &self,
         old_div: bool,
         new_div: bool,
         old_enbl: bool,

@@ -11,11 +11,11 @@ impl ObjectAttributMemorySearch {
     pub const MAX_CYCLES: usize = 80;
     const MAX_SCANLINE_SPRITES: usize = 10;
     const OAM_LENGTH: usize = 160;
-        pub fn new() -> PhysicsProcessingUnitState {
-        return PhysicsProcessingUnitState::ObjectAttributeMemory(ObjectAttributMemorySearch { cycles_counter: 0 });
+    pub fn new() -> PhysicsProcessingUnitState {
+        PhysicsProcessingUnitState::ObjectAttributeMemory(ObjectAttributMemorySearch { cycles_counter: 0 })
     }
-    fn next(self: Self, gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {
-        return if self.cycles_counter < ObjectAttributMemorySearch::MAX_CYCLES {
+    fn next(self, gpu_mem: &mut GpuMemory) -> PhysicsProcessingUnitState {
+        if self.cycles_counter < ObjectAttributMemorySearch::MAX_CYCLES {
             PhysicsProcessingUnitState::ObjectAttributeMemory(self)
         } else {
             gpu_mem.set_stat_mode(MODE_PICTURE_GENERATION);
@@ -29,29 +29,29 @@ impl ObjectAttributMemorySearch {
         let entries_done = self.cycles_counter / 2;
         self.find_sprites(gpu_mem, entries_todo, entries_done);
         self.cycles_counter += cycles;
-        return self.next(gpu_mem);
+        self.next(gpu_mem)
     }
 
-    pub fn read_byte(self: &Self, gpu_mem: &GpuMemory, addr: u16) -> u8 {
-        return match addr {
+    pub fn read_byte(&self, gpu_mem: &GpuMemory, addr: u16) -> u8 {
+        match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => gpu_mem.video_ram[usize::from(addr - VIDEO_RAM_START)],
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => 0xFF,
             UNUSED_START..=UNUSED_END => 0xFF,
             _ => panic!("PPU (O Search) doesnt read from address: {:04X}", addr),
-        };
+        }
     }
 
-    pub fn write_byte(self: &mut Self, gpu_mem: &mut GpuMemory, addr: u16, data: u8) {
+    pub fn write_byte(&mut self, gpu_mem: &mut GpuMemory, addr: u16, data: u8) {
         match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => gpu_mem.video_ram[usize::from(addr - VIDEO_RAM_START)] = data,
-            OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => return,
-            UNUSED_START..=UNUSED_END => return,
+            OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => (),
+            UNUSED_START..=UNUSED_END => (),
             _ => panic!("PPU (O Search) doesnt write to address: {:04X}", addr),
         }
     }
 
     pub fn find_sprites(
-        self: &mut Self,
+        &mut self,
         gpu_mem: &mut GpuMemory,
         entries_todo: usize,
         entries_done: usize,

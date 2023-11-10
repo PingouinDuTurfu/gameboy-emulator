@@ -40,7 +40,7 @@ impl Bus {
         }
     }
 
-    pub fn init(self: &mut Self) {
+    pub fn init(&mut self) {
         self.memory.init();
         self.input_output.init();
         self.graphics.init();
@@ -49,7 +49,7 @@ impl Bus {
         self.timer.init();
     }
 
-    pub fn set_mbc(self: &mut Self, cart_mbc: MbcDefault) {
+    pub fn set_mbc(&mut self, cart_mbc: MbcDefault) {
         self.memory.set_mbc(cart_mbc);
     }
 
@@ -94,23 +94,23 @@ impl Bus {
         self.write_byte(address + 1, ((value & 0xFF00) >> 8) as u8);
     }
 
-    pub fn update_input(self: &mut Self) -> bool {
+    pub fn update_input(&mut self) -> bool {
         let should_exit = self.keypad.update_input();
         if self.keypad.is_keypad_interrupt() {
             self.input_output.request_keypad_interrupt();
         }
-        return should_exit;
+        should_exit
     }
 
-    pub fn set_keypad(self: &mut Self, event_pump: EventPump) {
+    pub fn set_keypad(&mut self, event_pump: EventPump) {
         self.keypad.set_keypad(event_pump);
     }
 
-    pub fn interrupt_pending(self: &Self) -> bool {
+    pub fn interrupt_pending(&self) -> bool {
         (self.memory.interrupt_enable() & self.input_output.read_byte(IF_REG) & 0x1F) != 0
     }
 
-    pub fn adv_cycles(self: &mut Self, cycles: usize) {
+    pub fn adv_cycles(&mut self, cycles: usize) {
         self.timer.adv_cycles(&mut self.input_output, cycles);
         self.graphics.adv_cycles(&mut self.input_output, cycles);
         if self.oam_dma.dma_active() {
@@ -121,7 +121,7 @@ impl Bus {
         }
     }
 
-    fn handle_dma_transfer(self: &mut Self) {
+    fn handle_dma_transfer(&mut self) {
         let addr = self.oam_dma.calc_addr();
         let value = self.read_byte_for_dma(addr);
 
@@ -130,8 +130,8 @@ impl Bus {
         self.oam_dma.incr_cycles(&mut self.graphics);
     }
 
-    fn read_byte_for_dma(self: &Self, addr: u16) -> u8 {
-        let byte = match addr {
+    fn read_byte_for_dma(&self, addr: u16) -> u8 {
+        match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => self.graphics.read_byte_for_dma(addr),
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => self.graphics.read_byte_for_dma(addr),
             DMA_REG => self.oam_dma.read_dma(addr),
@@ -142,14 +142,13 @@ impl Bus {
             0xFF03..=0xFF0F => self.input_output.read_byte(addr),
             0xFF4C..=0xFF7F => self.input_output.read_byte(addr),
             _ => self.memory.read_byte_for_dma(addr),
-        };
-        return byte;
+        }
     }
 
-    fn write_byte_for_dma(self: &mut Self, addr: u16, data: u8) {
+    fn write_byte_for_dma(&mut self, addr: u16, data: u8) {
         self.graphics.write_byte_for_dma(addr, data);
     }
-    pub fn update_display(self: &mut Self, texture: &mut Texture) -> bool {
-        return self.graphics.update_display(texture);
+    pub fn update_display(&mut self, texture: &mut Texture) -> bool {
+        self.graphics.update_display(texture)
     }
 }

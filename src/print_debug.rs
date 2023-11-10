@@ -8,11 +8,11 @@ pub struct PrintDebug {
 
 impl PrintDebug {
 
-    pub fn add_data(self: &mut Self, data: String) {
+    pub fn add_data(&mut self, data: String) {
         self.data.push_str(&data);
     }
 
-    pub fn add_video_ram_table_data(self: &mut Self, data: [u8; (0x9FFF - 0x8000) as usize + 1]) {
+    pub fn add_video_ram_table_data(&mut self, data: [u8; (0x9FFF - 0x8000) as usize + 1]) {
         if self.already_printed_video_ram {
             return;
         }
@@ -25,7 +25,7 @@ impl PrintDebug {
         }
     }
 
-    pub fn save_data(self: &mut Self) {
+    pub fn save_data(&mut self) {
         use std::fs::File;
         use std::io::Write;
         let mut file = File::create("output.txt").expect("Impossible de créer le fichier");
@@ -36,7 +36,7 @@ impl PrintDebug {
         }
     }
 
-    pub fn save_last_lines(self: &mut Self) {
+    pub fn save_last_lines(&mut self) {
         use std::fs::File;
         use std::io::Write;
         let mut file = File::create("output_partial.txt").expect("Impossible de créer le fichier");
@@ -54,7 +54,7 @@ impl PrintDebug {
         }
     }
 
-    pub fn increment_index(self: &mut Self) {
+    pub fn increment_index(&mut self) {
         self.index += 1;
         self.global_index += 1;
     }

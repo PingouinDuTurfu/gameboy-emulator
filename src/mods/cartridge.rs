@@ -15,7 +15,7 @@ pub struct Cartridge {
 
 impl Cartridge {
     pub fn new() -> Cartridge {
-        return Cartridge {
+        Cartridge {
             entry_point: [0; 4],
             logo: [0; 48],
             title: [0; 16],
@@ -24,10 +24,10 @@ impl Cartridge {
             old_licence_code: 0,
             rom_version: 0,
             checksum_val: 0,
-        };
+        }
     }
 
-    pub fn read_cartridge_header(self: &mut Self, game_path: &str) -> Result<MbcDefault, String> {
+    pub fn read_cartridge_header(&mut self, game_path: &str) -> Result<MbcDefault, String> {
         let game_bytes = fs::read(game_path).unwrap();
 
         self.entry_point[..4].clone_from_slice(&game_bytes[0x0100..=0x0103]);
@@ -40,17 +40,15 @@ impl Cartridge {
         self.rom_version = game_bytes[0x014C];
         self.checksum_val = game_bytes[0x014D];
 
-        if let Err(s) = self.checksum(&game_bytes[0x0134..=0x014C]) {
-            return Err(s);
-        }
+        self.checksum(&game_bytes[0x0134..=0x014C])?;
 
         let mut mbc = MbcDefault::new();
         mbc.load_game(game_bytes);
 
-        return Ok(mbc);
+        Ok(mbc)
     }
 
-    pub fn checksum(self: &Self, bytes: &[u8]) -> Result<u8, String> {
+    pub fn checksum(&self, bytes: &[u8]) -> Result<u8, String> {
         let mut x: u16 = 0;
         for i in 0..=24 {
             x = x.wrapping_sub(bytes[i] as u16).wrapping_sub(1);
@@ -61,6 +59,6 @@ impl Cartridge {
         } else {
             println!("checksum passed");
         }
-        return Ok(self.checksum_val);
+        Ok(self.checksum_val)
     }
 }

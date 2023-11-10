@@ -4,7 +4,7 @@ use sdl2::rect::Rect;
 use sdl2::render::TextureAccess;
 
 use crate::mods::cartridge::Cartridge;
-use crate::mods::cpu::CPU;
+use crate::mods::cpu::Cpu;
 use crate::print_debug::PrintDebug;
 
 pub const SCALE: u32 = 3;
@@ -23,7 +23,7 @@ pub static mut PRINT_DEBUG: PrintDebug = PrintDebug {debug: false,
 };
 
 pub struct Emulator {
-    cpu: CPU,
+    cpu: Cpu,
     cart: Cartridge,
     sdl_context: Option<Sdl>,
     video_subsystem: Option<VideoSubsystem>
@@ -32,14 +32,14 @@ pub struct Emulator {
 impl Emulator {
     pub fn new() -> Emulator {
         return Emulator {
-            cpu: CPU::new(),
+            cpu: Cpu::new(),
             cart: Cartridge::new(),
             sdl_context: None,
             video_subsystem: None
         };
     }
 
-    pub fn setup_emulator(self: &mut Self, game_path: &str) {
+    pub fn setup_emulator(&mut self, game_path: &str) {
         let sdl_context = sdl2::init().expect("Couldnt create sdl context"); // SDL for graphics, sound and input
 
         let video_subsystem = sdl_context // Init Display
@@ -59,7 +59,7 @@ impl Emulator {
         self.cpu.init(self.cart.checksum_val);
     }
 
-    pub fn run(self: &mut Self) {
+    pub fn run(&mut self) {
         let video_subsystem = match &self.video_subsystem {
             Some(videosys) => videosys,
             None => panic!("No video subsystem was initialized"),

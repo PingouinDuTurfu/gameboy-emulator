@@ -5,7 +5,7 @@ use crate::mods::emulator::PRINT_DEBUG;
 use crate::mods::mbc_default::MbcDefault;
 use crate::mods::register::Registers;
 
-pub struct CPU {
+pub struct Cpu {
     registers: Registers,
     bus: Bus,
     pc: u16,
@@ -15,10 +15,10 @@ pub struct CPU {
     halted: bool
 }
 
-impl CPU {
+impl Cpu {
 
-    pub fn new() -> CPU {
-        CPU {
+    pub fn new() -> Cpu {
+        Cpu {
             registers: Registers::new(),
             pc: 0x0100,
             sp: 0xFFFE,
@@ -35,7 +35,7 @@ impl CPU {
     }
 
     pub(crate) fn step(&mut self, debug: bool) {
-        if self.ime_scheduled == true {
+        if self.ime_scheduled {
             self.ime_scheduled = false;
             self.ime = true;
         }
@@ -47,14 +47,14 @@ impl CPU {
             let prefix_instruction_byte = self.read_pc();
             if debug {
                 unsafe {
-                    PRINT_DEBUG.add_data(format!("{}\n", CPU::print_debug_prefixed(prefix_instruction_byte)));
+                    PRINT_DEBUG.add_data(format!("{}\n", Cpu::print_debug_prefixed(prefix_instruction_byte)));
                 }
             }
             self.execute_prefixed(prefix_instruction_byte);
         } else {
             if debug {
                 unsafe {
-                    let a = format!("step {} 0x{:04X} 0x{:02X} {} \n", PRINT_DEBUG.global_index, self.pc - 1, instruction_byte.clone(), CPU::print_debug(instruction_byte.clone()));
+                    let a = format!("step {} 0x{:04X} 0x{:02X} {} \n", PRINT_DEBUG.global_index, self.pc - 1, instruction_byte.clone(), Cpu::print_debug(instruction_byte.clone()));
                     PRINT_DEBUG.add_data(format!("{}", a));
                 }
             }
@@ -398,9 +398,7 @@ impl CPU {
                 self.registers.f.half_carry = false;
                 self.registers.f.carry = !self.registers.f.carry;
             }
-            0x40 => {
-                self.registers.b = self.registers.b;
-            }
+            0x40 => {}
             0x41 => {
                 self.registers.b = self.registers.c;
             }
@@ -431,9 +429,7 @@ impl CPU {
             0x4a => {
                 self.registers.c = self.registers.d;
             }
-            0x4b => {
-                self.registers.c = self.registers.e;
-            }
+            0x4b => {}
             0x4c => {
                 self.registers.c = self.registers.h;
             }
@@ -479,9 +475,7 @@ impl CPU {
             0x5a => {
                 self.registers.e = self.registers.d;
             }
-            0x5b => {
-                self.registers.e = self.registers.e;
-            }
+            0x5b => {}
             0x5c => {
                 self.registers.e = self.registers.h;
             }
@@ -533,9 +527,7 @@ impl CPU {
             0x6c => {
                 self.registers.l = self.registers.h;
             }
-            0x6d => {
-                self.registers.l = self.registers.l;
-            }
+            0x6d => {}
             0x6e => {
                 self.registers.l = self.read_address(self.registers.get_hl());
             }
@@ -1972,7 +1964,7 @@ impl CPU {
 
         for i in 0..=4 {
             if i_enable & if_register_trigger & (0x01 << i) == (0x01 << i) {
-                if_register_trigger = if_register_trigger & !(0x01 << i);
+                if_register_trigger &= !(0x01 << i);
                 self.write_byte(0xFF0F, if_register_trigger);
 
                 self.push(self.pc);
@@ -1983,16 +1975,16 @@ impl CPU {
         }
     }
 
-    pub fn adv_cycles(self: &mut Self, cycles: usize) {
+    pub fn adv_cycles(&mut self, cycles: usize) {
         self.bus.adv_cycles(cycles);
     }
 
-    pub fn internal_cycle(self: &mut Self) {
+    pub fn internal_cycle(&mut self) {
         self.adv_cycles(4);
         // self.curr_cycles += 4;
     }
 
-    fn read_address(self: &mut Self, address: u16) -> u8 {
+    fn read_address(&mut self, address: u16) -> u8 {
         let byte = self.bus.read_byte(address);
         self.adv_cycles(4);
         // self.curr_cycles += 4;
@@ -2013,27 +2005,27 @@ impl CPU {
         byte
     }
 
-    fn write_byte(self: &mut Self, addr: u16, data: u8) {
+    fn write_byte(&mut self, addr: u16, data: u8) {
         self.bus.write_byte(addr, data);
         self.adv_cycles(4);
         // self.curr_cycles += 4;
     }
 
-    fn write_word(self: &mut Self, addr: u16, data: u16) {
+    fn write_word(&mut self, addr: u16, data: u16) {
         self.bus.write_word(addr, data);
         self.adv_cycles(8);
         // self.curr_cycles += 8;
     }
 
-    pub fn set_keypad(self: &mut Self, event_pump: sdl2::EventPump) {
+    pub fn set_keypad(&mut self, event_pump: sdl2::EventPump) {
         self.bus.set_keypad(event_pump);
     }
 
-    pub fn set_mbc(self: &mut Self, cart_mbc: MbcDefault) {
+    pub fn set_mbc(&mut self, cart_mbc: MbcDefault) {
         self.bus.set_mbc(cart_mbc);
     }
 
-    pub fn update_input(self: &mut Self) -> bool {
+    pub fn update_input(&mut self) -> bool {
         return self.bus.update_input();
     }
 
@@ -2288,11 +2280,11 @@ impl CPU {
         }
     }
 
-    pub fn update_display(self: &mut Self, texture: &mut Texture) -> bool {
+    pub fn update_display(&mut self, texture: &mut Texture) -> bool {
         return self.bus.update_display(texture);
     }
 
-    pub fn halted(self: &mut Self) -> bool {
+    pub fn halted(&mut self) -> bool {
         return self.halted;
     }
 

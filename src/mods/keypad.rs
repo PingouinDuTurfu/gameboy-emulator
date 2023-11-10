@@ -25,22 +25,21 @@ impl Keypad {
         }
     }
 
-    pub fn init(self: &mut Self) {
+    pub fn init(&mut self) {
         self.data = 0xFF;
     }
 
-    pub fn read_byte(self: &Self, address: u16) -> u8 {
+    pub fn read_byte(&self, address: u16) -> u8 {
         if !self.something_selected {
             return self.data | 0x0F;
         }
-        let byte = match address {
+        match address {
             KEYPAD_REGISTER => self.data,
             _ => panic!("Keypad cannot read from addr: {:04X}", address),
-        };
-        return byte;
+        }
     }
 
-    pub fn write_byte(self: &mut Self, address: u16, data: u8) {
+    pub fn write_byte(&mut self, address: u16, data: u8) {
         match address {
             KEYPAD_REGISTER => {
                 self.data = (data & 0x30) | (self.data & 0xCF);
@@ -50,11 +49,11 @@ impl Keypad {
         };
     }
 
-    pub fn is_keypad_interrupt(self: &Self) -> bool {
-        return self.something_selected && self.button_change;
+    pub fn is_keypad_interrupt(&self) -> bool {
+        self.something_selected && self.button_change
     }
 
-    pub fn set_keypad(self: &mut Self, event_pump: EventPump) {
+    pub fn set_keypad(&mut self, event_pump: EventPump) {
         self.event_pump = Some(event_pump);
     }
 
@@ -87,7 +86,7 @@ impl Keypad {
             self.data = (self.data & 0xF0) | self.row_command;
         }
 
-        return should_exit;
+        should_exit
     }
 
     pub fn keydown(&mut self, key: Keycode) {

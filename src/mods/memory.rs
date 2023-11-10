@@ -22,14 +22,14 @@ impl Memory {
         }
     }
 
-    pub fn init(self: &mut Self) {
+    pub fn init(&mut self) {
         self.interrupt_enable = 0x00;
     }
-    pub fn set_mbc(self: &mut Self, cart_mbc: MbcDefault) {
+    pub fn set_mbc(&mut self, cart_mbc: MbcDefault) {
         self.mbc = cart_mbc;
     }
 
-    pub fn read_byte(self: &Self, address: u16) -> u8 {
+    pub fn read_byte(&self, address: u16) -> u8 {
         let byte = match address {
             ROM_START..=ROM_END => self.mbc.read_rom_byte(address),
             RAM_START..=RAM_END => self.mbc.read_ram_byte(address),
@@ -41,7 +41,7 @@ impl Memory {
         byte
     }
 
-    pub fn write_byte(self: &mut Self, address: u16, data: u8) {
+    pub fn write_byte(&mut self, address: u16, data: u8) {
         match address {
             ROM_START..=ROM_END => return, // On n'ecrit pas dans la ROM, car on est pas des animaux
             RAM_START..=RAM_END => self.mbc.write_ram_byte(address, data),
@@ -52,7 +52,7 @@ impl Memory {
         };
     }
 
-    pub fn read_byte_for_dma(self: &Self, addr: u16) -> u8 {
+    pub fn read_byte_for_dma(&self, addr: u16) -> u8 {
         let byte = match addr {
             ROM_START..=ROM_END => self.mbc.read_rom_byte(addr),
             RAM_START..=RAM_END => self.mbc.read_ram_byte(addr),
@@ -63,7 +63,7 @@ impl Memory {
         return byte;
     }
 
-    pub fn interrupt_enable(self: &Self) -> u8 {
+    pub fn interrupt_enable(&self) -> u8 {
         return self.interrupt_enable;
     }
 }

@@ -46,7 +46,7 @@ impl VerticalBlank {
         return self.next(gpu_mem);
     }
 
-    pub fn read_byte(self: &Self, gpu_mem: &GpuMemory, addr: u16) -> u8 {
+    pub fn read_byte(&self, gpu_mem: &GpuMemory, addr: u16) -> u8 {
         return match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => gpu_mem.video_ram[usize::from(addr - VIDEO_RAM_START)],
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => gpu_mem.object_attribute_memory[usize::from(addr - OBJECT_ATTRIBUTE_MEMORY_START)],
@@ -55,7 +55,7 @@ impl VerticalBlank {
         };
     }
 
-    pub fn write_byte(self: &mut Self, gpu_mem: &mut GpuMemory, addr: u16, data: u8) {
+    pub fn write_byte(&mut self, gpu_mem: &mut GpuMemory, addr: u16, data: u8) {
         match addr {
             VIDEO_RAM_START..=VIDEO_RAM_END => gpu_mem.video_ram[usize::from(addr - VIDEO_RAM_START)] = data,
             OBJECT_ATTRIBUTE_MEMORY_START..=OBJECT_ATTRIBUTE_MEMORY_END => gpu_mem.object_attribute_memory[usize::from(addr - OBJECT_ATTRIBUTE_MEMORY_START)] = data,
