@@ -5,7 +5,6 @@ use sdl2::render::TextureAccess;
 
 use crate::mods::cartridge::Cartridge;
 use crate::mods::cpu::Cpu;
-use crate::print_debug::PrintDebug;
 
 pub const SCALE: u32 = 3;
 pub const NUM_PIXELS_X: u32 = 160;
@@ -14,13 +13,6 @@ pub const TOTAL_PIXELS: u32 = NUM_PIXELS_X * NUM_PIXELS_Y;
 pub const SCREEN_WIDTH: u32 = NUM_PIXELS_X * SCALE;
 pub const SCREEN_HEIGHT: u32 = NUM_PIXELS_Y * SCALE;
 pub const BYTES_PER_TILE_SIGNED: isize = 16;
-
-pub static mut PRINT_DEBUG: PrintDebug = PrintDebug {debug: false,
-        data: String::new(),
-        global_index: 0,
-        index: 0,
-        already_printed_video_ram: false
-};
 
 pub struct Emulator {
     cpu: Cpu,
@@ -99,7 +91,7 @@ impl Emulator {
             self.cpu.check_interrupts();
 
             if !self.cpu.halted() {
-                self.cpu.step(true);
+                self.cpu.step();
             } else {
                 self.cpu.adv_cycles(4);
             }

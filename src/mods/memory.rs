@@ -68,7 +68,8 @@ impl Memory {
             ROM_START..=ROM_END => {
                 if self.is_mbc_5 {
                     self.mbc_5.write_rom_byte(address, data)
-                } else {} // On n'ecrit pas dans la ROM, car on est pas des animaux
+                }
+                // Sinon on n'ecrit pas dans la ROM, car on est pas des animaux
             },
             RAM_START..=RAM_END => {
                 if self.is_mbc_5 {

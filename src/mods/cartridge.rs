@@ -119,7 +119,7 @@ impl Cartridge {
         )
     }
 
-    fn get_rom_size(self: &Self) -> Option<(usize, usize)> {
+    fn get_rom_size(&self) -> Option<(usize, usize)> {
         match self.rom_size {
             0x00 => Some((32_768, 2)), // No banking
             0x01 => Some((65_536, 4)),
@@ -134,7 +134,7 @@ impl Cartridge {
         }
     }
 
-    fn get_ram_size(self: &Self) -> Option<(usize, usize)> {
+    fn get_ram_size(&self) -> Option<(usize, usize)> {
         match self.ram_size {
             0x00 => Some((0, 0)),
             0x02 => Some((8_192, 1)),    // 1 Bank
@@ -159,8 +159,8 @@ impl Cartridge {
         Ok(self.checksum_val)
     }
 
-    pub fn get_cartridge_type(self: &Self) -> u8 {
-        return self.cartridge_type
+    pub fn get_cartridge_type(&self) -> u8 {
+        self.cartridge_type
     }
 }
 
@@ -168,10 +168,10 @@ impl Clone for Cartridge {
     fn clone(&self) -> Self {
         Self {
             game_bytes: self.game_bytes.clone(),
-            entry_point: self.entry_point.clone(),
-            logo: self.logo.clone(),
-            title: self.title.clone(),
-            new_license_code: self.new_license_code.clone(),
+            entry_point: self.entry_point,
+            logo: self.logo,
+            title: self.title,
+            new_license_code: self.new_license_code,
             cartridge_type: self.cartridge_type,
             rom_size: self.rom_size,
             ram_size: self.ram_size,

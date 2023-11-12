@@ -1,5 +1,3 @@
-use crate::mods::emulator::PRINT_DEBUG;
-
 pub const ROM_BLOCK_START: u16 = 0x0000;
 pub const ROM_BLOCK_END: u16 = 0x3FFF;
 pub const ROM_ADDITIONAL_START: u16 = 0x4000;
@@ -34,7 +32,7 @@ impl Mbc5 {
         Mbc5 {
             rom: Vec::new(),
             ram: Vec::new(),
-            rom_offset: 1 * ROM_BANK_SIZE,
+            rom_offset: ROM_BANK_SIZE,
             ram_offset: 0,
             rom_bank_lo: 1,
             rom_bank_hi: 0,
@@ -56,8 +54,7 @@ impl Mbc5 {
                 _ => panic!("MbcNone: ram cannot read from addr {:#04X}", address),
             };
         }
-
-        return 0xFF;
+        0xFF
     }
 
     pub(crate) fn write_ram_byte(&mut self, address: u16, val: u8) {
@@ -81,10 +78,10 @@ impl Mbc5 {
         }
     }
 
-    pub(crate) fn write_rom_byte(self: &mut Self, addr: u16, val: u8) {
+    pub(crate) fn write_rom_byte(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x1FFF => self.ram_enabled = val == 0x0A,
-            ROM_BANK_LOW_START..=ROM_BANK_LOW_END => self.rom_bank_lo = usize::from(val & 0xFF),
+            ROM_BANK_LOW_START..=ROM_BANK_LOW_END => self.rom_bank_lo = usize::from(val),
             ROM_BANK_HIGH_START..=ROM_BANK_HIGH_END => self.rom_bank_hi = usize::from(val & 0x01),
             RAM_BANK_START..=RAM_BANK_END => self.ram_bank = usize::from(val & 0x0F),
             0x6000..=0x7FFF => (),
@@ -100,8 +97,7 @@ impl Mbc5 {
     }
 
     pub(crate) fn load_game(
-        self: &mut Self,
-        // game_path: &str,
+        &mut self,
         game_bytes: Vec<u8>,
         rom_size: usize,
         rom_banks: usize,
