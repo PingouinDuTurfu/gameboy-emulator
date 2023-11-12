@@ -50,11 +50,18 @@ impl Emulator {
             .event_pump()
             .expect("Coulnt initialize event pump"); // Init Event System
 
-        let cart_mbc = self.cart.read_cartridge_header(game_path).unwrap();
+        self.cart.read_cartridge_header(game_path);
 
         self.sdl_context = Some(sdl_context);
         self.video_subsystem = Some(video_subsystem);
-        self.cpu.set_mbc(cart_mbc);
+
+        if self.cart.get_cartridge_type() == 0x00 {
+            let mbc = self.cart.clone().load_game_mbc_default().unwrap();
+            self.cpu.set_mbc_default(mbc);
+        } else {
+            let mbc = self.cart.clone().load_game_mbc_5().unwrap();
+            self.cpu.set_mbc_5(mbc);
+        }
         self.cpu.set_keypad(event_pump);
         self.cpu.init(self.cart.checksum_val);
     }
@@ -86,10 +93,6 @@ impl Emulator {
         let rect = Some(Rect::new(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT));
 
         loop {
-            unsafe {
-                PRINT_DEBUG.increment_index();
-            }
-
             if self.cpu.update_input() {
                 break;
             }

@@ -2,6 +2,7 @@ use sdl2::render::Texture;
 
 use crate::mods::bus::Bus;
 use crate::mods::emulator::PRINT_DEBUG;
+use crate::mods::mbc_5::Mbc5;
 use crate::mods::mbc_default::MbcDefault;
 use crate::mods::register::Registers;
 
@@ -45,19 +46,8 @@ impl Cpu {
         let prefixed = instruction_byte == 0xCB;
         if prefixed {
             let prefix_instruction_byte = self.read_pc();
-            if debug {
-                unsafe {
-                    PRINT_DEBUG.add_data(format!("{}\n", Cpu::print_debug_prefixed(prefix_instruction_byte)));
-                }
-            }
             self.execute_prefixed(prefix_instruction_byte);
         } else {
-            if debug {
-                unsafe {
-                    let a = format!("step {} 0x{:04X} 0x{:02X} {} \n", PRINT_DEBUG.global_index, self.pc - 1, instruction_byte.clone(), Cpu::print_debug(instruction_byte.clone()));
-                    PRINT_DEBUG.add_data(format!("{}", a));
-                }
-            }
             self.execute(instruction_byte);
         }
 
@@ -2013,8 +2003,12 @@ impl Cpu {
         self.bus.set_keypad(event_pump);
     }
 
-    pub fn set_mbc(&mut self, cart_mbc: MbcDefault) {
-        self.bus.set_mbc(cart_mbc);
+    pub fn set_mbc_default(&mut self, cart_mbc: MbcDefault) {
+        self.bus.set_mbc_default(cart_mbc);
+    }
+
+    pub fn set_mbc_5(&mut self, cart_mbc: Box<Mbc5>) {
+        self.bus.set_mbc_5(cart_mbc);
     }
 
     pub fn update_input(&mut self) -> bool {
@@ -2058,10 +2052,11 @@ impl Cpu {
 
     pub fn add_with_carry(&mut self, value: u8) -> u8 {
         let carry = if self.registers.f.carry { 1 } else { 0 };
-        let (value, did_overflow) = self.registers.a.overflowing_add(value + carry);
+        let (value, did_overflow) = self.registers.a.overflowing_add(value);
+        let (value, did_overflow2) = value.overflowing_add(carry);
         self.registers.f.zero = value == 0;
         self.registers.f.subtract = false;
-        self.registers.f.carry = did_overflow;
+        self.registers.f.carry = did_overflow | did_overflow2;
         self.registers.f.half_carry = (self.registers.a & 0xF) + (value & 0xF) + carry > 0xF;
         value
     }
@@ -2077,10 +2072,11 @@ impl Cpu {
 
     pub fn sub_with_carry(&mut self, value: u8) -> u8 {
         let carry = if self.registers.f.carry { 1 } else { 0 };
-        let (value, did_overflow) = self.registers.a.overflowing_sub(value + carry);
+        let (value, did_overflow) = self.registers.a.overflowing_sub(value);
+        let (value, did_overflow2) = value.overflowing_sub(carry);
         self.registers.f.zero = value == 0;
         self.registers.f.subtract = true;
-        self.registers.f.carry = did_overflow;
+        self.registers.f.carry = did_overflow | did_overflow2;
         self.registers.f.half_carry = (self.registers.a & 0xF) < (value & 0xF) + carry;
         value
     }
@@ -2126,11 +2122,6 @@ impl Cpu {
         if should_jump {
             self.internal_cycle();
             self.pc = (most_significant_byte << 8) | least_significant_byte;
-        }
-        unsafe {
-            if PRINT_DEBUG.global_index == 3859177 {
-                PRINT_DEBUG.add_data(format!("Eval cond: {}, r16: {:#04X} -> {}\n", should_jump, (most_significant_byte << 8) | least_significant_byte, self.pc));
-            }
         }
     }
 

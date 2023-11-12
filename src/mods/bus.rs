@@ -6,6 +6,7 @@ use crate::mods::gpu_memory::{OBJECT_ATTRIBUTE_MEMORY_END, OBJECT_ATTRIBUTE_MEMO
 use crate::mods::graphics::Graphics;
 use crate::mods::input_output::{IF_REG, InputOutput};
 use crate::mods::keypad::{Keypad, KEYPAD_REGISTER};
+use crate::mods::mbc_5::Mbc5;
 use crate::mods::mbc_default::MbcDefault;
 use crate::mods::memory::Memory;
 use crate::mods::timer::{Timer, TIMER_END, TIMER_START};
@@ -49,8 +50,12 @@ impl Bus {
         self.timer.init();
     }
 
-    pub fn set_mbc(&mut self, cart_mbc: MbcDefault) {
+    pub fn set_mbc_default(&mut self, cart_mbc: MbcDefault) {
         self.memory.set_mbc(cart_mbc);
+    }
+
+    pub fn set_mbc_5(&mut self, cart_mbc: Box<Mbc5>) {
+        self.memory.set_mbc_5(cart_mbc);
     }
 
     pub fn read_byte(&self, address: u16) -> u8 {

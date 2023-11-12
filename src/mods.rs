@@ -18,3 +18,4 @@ mod picture_generation;
 mod timer;
 mod dma;
 mod graphics;
+mod mbc_5;
