@@ -19,7 +19,7 @@ Ce projet est un émulateur de Gameboy DMG écrit en Rust.
 ## Améliorations possibles :
 - Ajouter le son
 - Améliorer la compatibilité avec MBC1, MBC3 et MBC7
-- 
+  
 Une attention particulière au projet de Zach pour la partie graphique [GitHub](https://github.com/zach1590/gameboy-emulator)
 
 ## Visuels :
